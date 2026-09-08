@@ -289,4 +289,49 @@ h1, h2, h3 {
   font-size: 14px;
   max-width: 320px;
   margin: 0 auto;
+  /* ---------- ACCIONES SOBRE TARJETAS (editar / eliminar) ---------- */
+.troya-card-acciones {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.troya-icon-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.troya-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.troya-icon-btn:hover {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+.troya-icon-btn--eliminar:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.troya-card-editando {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.troya-card-editando .troya-form {
+  margin-bottom: 0;
+}
 }
