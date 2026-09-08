@@ -28,11 +28,7 @@ export default function ClientesPage() {
       .select('*')
       .order('nombre', { ascending: true });
 
-    if (error) {
-      console.error('Error cargando clientes:', error);
-    } else {
-      setClientes(data ?? []);
-    }
+    if (!error) setClientes(data ?? []);
     setCargando(false);
   }
 
@@ -67,75 +63,44 @@ export default function ClientesPage() {
 
   return (
     <div>
-      <h1>Clientes</h1>
+      <div className="troya-header">
+        <div>
+          <h1>Clientes</h1>
+          <p className="troya-subtitulo">{clientes.length} cargados</p>
+        </div>
+      </div>
 
-      <form
-        onSubmit={crearCliente}
-        style={{
-          display: 'flex',
-          gap: '8px',
-          marginBottom: '24px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <input
-          placeholder="Nombre *"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          required
-        />
-        <input
-          placeholder="Localidad"
-          value={localidad}
-          onChange={(e) => setLocalidad(e.target.value)}
-        />
-        <input
-          placeholder="Provincia"
-          value={provincia}
-          onChange={(e) => setProvincia(e.target.value)}
-        />
-        <input
-          placeholder="Contacto"
-          value={contacto}
-          onChange={(e) => setContacto(e.target.value)}
-        />
-        <input
-          placeholder="Teléfono"
-          value={telefono}
-          onChange={(e) => setTelefono(e.target.value)}
-        />
-        <button type="submit">Agregar cliente</button>
+      <form onSubmit={crearCliente} className="troya-form">
+        <input className="troya-input" placeholder="Nombre *" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+        <input className="troya-input" placeholder="Localidad" value={localidad} onChange={(e) => setLocalidad(e.target.value)} />
+        <input className="troya-input" placeholder="Provincia" value={provincia} onChange={(e) => setProvincia(e.target.value)} />
+        <input className="troya-input" placeholder="Contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} />
+        <input className="troya-input" placeholder="Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+        <button type="submit" className="troya-btn">Agregar</button>
       </form>
 
       {cargando ? (
-        <p>Cargando...</p>
+        <p className="troya-subtitulo">Cargando...</p>
+      ) : clientes.length === 0 ? (
+        <div className="troya-vacio">
+          <h3>Todavía no cargaste ningún cliente</h3>
+          <p>Usá el formulario de arriba para dar de alta el primero.</p>
+        </div>
       ) : (
-        <table
-          border={1}
-          cellPadding={8}
-          style={{ borderCollapse: 'collapse', width: '100%' }}
-        >
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Localidad</th>
-              <th>Provincia</th>
-              <th>Contacto</th>
-              <th>Teléfono</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientes.map((c) => (
-              <tr key={c.id}>
-                <td>{c.nombre}</td>
-                <td>{c.localidad}</td>
-                <td>{c.provincia}</td>
-                <td>{c.contacto}</td>
-                <td>{c.telefono}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="troya-lista">
+          {clientes.map((c) => (
+            <div key={c.id} className="troya-card">
+              <div className="troya-card-info">
+                <h3>{c.nombre}</h3>
+                <p>
+                  {[c.localidad, c.provincia].filter(Boolean).join(', ') || 'Sin ubicación cargada'}
+                  {c.contacto ? ` · ${c.contacto}` : ''}
+                  {c.telefono ? ` · ${c.telefono}` : ''}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
