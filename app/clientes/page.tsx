@@ -14,6 +14,7 @@ type Cliente = {
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [panelAbierto, setPanelAbierto] = useState(false);
   const [nombre, setNombre] = useState('');
   const [localidad, setLocalidad] = useState('');
   const [provincia, setProvincia] = useState('');
@@ -56,6 +57,7 @@ export default function ClientesPage() {
     setProvincia('');
     setContacto('');
     setTelefono('');
+    setPanelAbierto(false);
     cargarClientes();
   }
 
@@ -115,21 +117,31 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      <form onSubmit={crearCliente} className="troya-form">
-        <input className="troya-input" placeholder="Nombre *" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
-        <input className="troya-input" placeholder="Localidad" value={localidad} onChange={(e) => setLocalidad(e.target.value)} />
-        <input className="troya-input" placeholder="Provincia" value={provincia} onChange={(e) => setProvincia(e.target.value)} />
-        <input className="troya-input" placeholder="Contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} />
-        <input className="troya-input" placeholder="Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-        <button type="submit" className="troya-btn">Agregar</button>
-      </form>
+      <div className="troya-panel">
+        <button className={`troya-panel-toggle ${panelAbierto ? 'abierto' : ''}`} onClick={() => setPanelAbierto(!panelAbierto)}>
+          Nuevo cliente
+          <IconMas />
+        </button>
+        {panelAbierto && (
+          <div className="troya-panel-body">
+            <form onSubmit={crearCliente} className="troya-form">
+              <input className="troya-input" placeholder="Nombre *" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+              <input className="troya-input" placeholder="Localidad" value={localidad} onChange={(e) => setLocalidad(e.target.value)} />
+              <input className="troya-input" placeholder="Provincia" value={provincia} onChange={(e) => setProvincia(e.target.value)} />
+              <input className="troya-input" placeholder="Contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} />
+              <input className="troya-input" placeholder="Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+              <button type="submit" className="troya-btn">Guardar</button>
+            </form>
+          </div>
+        )}
+      </div>
 
       {cargando ? (
         <p className="troya-subtitulo">Cargando...</p>
       ) : clientes.length === 0 ? (
         <div className="troya-vacio">
           <h3>Todavía no cargaste ningún cliente</h3>
-          <p>Usá el formulario de arriba para dar de alta el primero.</p>
+          <p>Usá "Nuevo cliente" arriba para dar de alta el primero.</p>
         </div>
       ) : (
         <div className="troya-lista">
@@ -144,8 +156,8 @@ export default function ClientesPage() {
                   <input className="troya-input" value={borrador.telefono ?? ''} onChange={(e) => setBorrador({ ...borrador, telefono: e.target.value })} placeholder="Teléfono" />
                 </div>
                 <div className="troya-card-acciones">
-                  <button className="troya-btn" onClick={() => guardarEdicion(c.id)}>Guardar</button>
-                  <button className="troya-icon-btn" onClick={cancelarEdicion} title="Cancelar">✕</button>
+                  <button className="troya-btn" onClick={() => guardarEdicion(c.id)}>Guardar cambios</button>
+                  <button className="troya-btn troya-btn-secundario" onClick={cancelarEdicion}>Cancelar</button>
                 </div>
               </div>
             ) : (
@@ -175,9 +187,17 @@ export default function ClientesPage() {
   );
 }
 
+function IconMas() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 function IconLapiz() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
     </svg>
@@ -186,7 +206,7 @@ function IconLapiz() {
 
 function IconTacho() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 6h18" />
       <path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2" />
       <path d="M19 6l-1 14a1 1 0 01-1 1H7a1 1 0 01-1-1L5 6" />
