@@ -2,11 +2,13 @@
   --bg: #FBF9F6;
   --surface: #FFFFFF;
   --ink: #1C1512;
-  --muted: #8A7F76;
-  --line: #EAE3DC;
+  --muted: #948578;
+  --line: #ECE4DB;
   --red: #DA231F;
   --orange: #EB6726;
   --amber: #FABF1F;
+  --tint-orange: #FDF0E7;
+  --tint-red: #FCEAE9;
   --font-display: var(--font-space-grotesk), sans-serif;
   --font-body: var(--font-inter), sans-serif;
 }
@@ -37,7 +39,7 @@ h1, h2, h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: 16px 24px;
   background: var(--ink);
   border-bottom: 3px solid var(--red);
   position: sticky;
@@ -52,13 +54,13 @@ h1, h2, h3 {
 
 .troya-topbar-links {
   display: none;
-  gap: 28px;
+  gap: 30px;
 }
 
 .troya-topbar-links a {
-  color: #F2EDE8;
+  color: #EFE8E1;
   text-decoration: none;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 500;
   padding-bottom: 4px;
   border-bottom: 2px solid transparent;
@@ -80,7 +82,7 @@ h1, h2, h3 {
   display: flex;
   background: var(--surface);
   border-top: 1px solid var(--line);
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 -4px 16px rgba(28, 21, 18, 0.06);
   z-index: 20;
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -91,97 +93,133 @@ h1, h2, h3 {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 9px 4px 8px;
+  padding: 10px 4px 9px;
   text-decoration: none;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .troya-bottomnav a svg {
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
 }
 
 .troya-bottomnav a.activo {
   color: var(--red);
 }
 
-/* ---------- RESPONSIVE: a partir de tablet/desktop ---------- */
 @media (min-width: 768px) {
-  .troya-topbar-links {
-    display: flex;
-  }
-  .troya-bottomnav {
-    display: none;
-  }
-  .troya-main {
-    padding-bottom: 40px;
-  }
+  .troya-topbar-links { display: flex; }
+  .troya-bottomnav { display: none; }
+  .troya-main { padding-bottom: 48px; }
 }
 
 /* ---------- CONTENIDO ---------- */
 .troya-main {
-  padding: 24px 18px 90px;
-  max-width: 900px;
+  padding: 28px 20px 90px;
+  max-width: 880px;
   margin: 0 auto;
 }
 
 .troya-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
   flex-wrap: wrap;
 }
 
 .troya-header h1 {
-  font-size: 26px;
+  font-size: 27px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .troya-subtitulo {
   color: var(--muted);
-  font-size: 14px;
-  margin-top: 2px;
+  font-size: 13.5px;
+  margin-top: 3px;
 }
 
-/* ---------- FORMULARIO ---------- */
+/* ---------- PANEL DE ALTA (colapsable) ---------- */
+.troya-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.troya-panel-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.troya-panel-toggle:hover {
+  background: var(--tint-orange);
+}
+
+.troya-panel-toggle svg {
+  width: 18px;
+  height: 18px;
+  color: var(--orange);
+  transition: transform 0.2s;
+}
+
+.troya-panel-toggle.abierto svg {
+  transform: rotate(45deg);
+}
+
+.troya-panel-body {
+  padding: 4px 18px 18px;
+  border-top: 1px solid var(--line);
+}
+
 .troya-form {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 22px;
+  padding-top: 14px;
 }
 
 .troya-input {
-  flex: 1 1 150px;
+  flex: 1 1 160px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 11px 13px;
+  border-radius: 9px;
+  padding: 11px 14px;
   font-size: 14px;
   font-family: var(--font-body);
-  background: var(--surface);
+  background: #FEFDFB;
   color: var(--ink);
 }
 
-.troya-input::placeholder {
-  color: #B5AAA0;
-}
+.troya-input::placeholder { color: #B5AAA0; }
 
 .troya-input:focus {
   outline: none;
   border-color: var(--orange);
-  box-shadow: 0 0 0 3px rgba(235, 103, 38, 0.14);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(235, 103, 38, 0.13);
 }
 
 .troya-btn {
   background: var(--red);
   color: #fff;
   border: none;
-  border-radius: 8px;
-  padding: 11px 20px;
+  border-radius: 9px;
+  padding: 11px 22px;
   font-weight: 600;
   font-size: 14px;
   font-family: var(--font-body);
@@ -189,12 +227,18 @@ h1, h2, h3 {
   transition: background 0.15s, transform 0.1s;
 }
 
-.troya-btn:hover {
-  background: #B81D19;
+.troya-btn:hover { background: #B81D19; }
+.troya-btn:active { transform: scale(0.98); }
+
+.troya-btn-secundario {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
 }
 
-.troya-btn:active {
-  transform: scale(0.98);
+.troya-btn-secundario:hover {
+  background: var(--bg);
+  color: var(--ink);
 }
 
 /* ---------- LISTA DE TARJETAS ---------- */
@@ -207,40 +251,97 @@ h1, h2, h3 {
 .troya-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-left: 4px solid var(--line);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: 13px;
+  padding: 16px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 16px;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative;
+  transition: box-shadow 0.18s, border-color 0.18s;
 }
+
+.troya-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 16px; right: 16px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--line);
+}
+
+.troya-card--activo::before { background: var(--red); }
+.troya-card--alerta::before { background: var(--amber); }
 
 .troya-card:hover {
-  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-}
-
-.troya-card--activo {
-  border-left-color: var(--red);
-}
-
-.troya-card--alerta {
-  border-left-color: var(--amber);
+  box-shadow: 0 6px 20px rgba(28, 21, 18, 0.08);
+  border-color: #E0D5CB;
 }
 
 .troya-card-info h3 {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 2px;
+  font-size: 16.5px;
+  font-weight: 700;
+  margin-bottom: 3px;
 }
 
 .troya-card-info p {
   font-size: 13px;
   color: var(--muted);
   margin: 0;
+  line-height: 1.5;
+}
+
+.troya-card-editando {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.troya-card-editando .troya-form { padding-top: 0; }
+
+/* ---------- ACCIONES (editar / eliminar) ---------- */
+.troya-card-acciones {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.troya-icon-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--tint-orange);
+  color: var(--orange);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.troya-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+.troya-icon-btn:hover {
+  background: var(--orange);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.troya-icon-btn--eliminar {
+  background: var(--tint-red);
+  color: var(--red);
+}
+
+.troya-icon-btn--eliminar:hover {
+  background: var(--red);
+  color: #fff;
 }
 
 /* ---------- INDICADOR DE CUMPLIMIENTO (llama) ---------- */
@@ -248,12 +349,12 @@ h1, h2, h3 {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
-  min-width: 84px;
+  gap: 5px;
+  min-width: 88px;
 }
 
 .troya-gauge-track {
-  width: 84px;
+  width: 88px;
   height: 6px;
   background: var(--line);
   border-radius: 4px;
@@ -267,7 +368,7 @@ h1, h2, h3 {
 }
 
 .troya-gauge-label {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   font-family: var(--font-display);
 }
@@ -275,8 +376,11 @@ h1, h2, h3 {
 /* ---------- ESTADO VACÍO ---------- */
 .troya-vacio {
   text-align: center;
-  padding: 60px 20px;
+  padding: 64px 20px;
   color: var(--muted);
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 14px;
 }
 
 .troya-vacio h3 {
@@ -289,49 +393,4 @@ h1, h2, h3 {
   font-size: 14px;
   max-width: 320px;
   margin: 0 auto;
-  /* ---------- ACCIONES SOBRE TARJETAS (editar / eliminar) ---------- */
-.troya-card-acciones {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.troya-icon-btn {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--muted);
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.troya-icon-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.troya-icon-btn:hover {
-  color: var(--orange);
-  border-color: var(--orange);
-}
-
-.troya-icon-btn--eliminar:hover {
-  color: var(--red);
-  border-color: var(--red);
-}
-
-.troya-card-editando {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-}
-
-.troya-card-editando .troya-form {
-  margin-bottom: 0;
-}
 }
