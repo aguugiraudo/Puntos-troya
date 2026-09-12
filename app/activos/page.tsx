@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import CumplimientoGauge from '@/components/CumplimientoGauge';
 
@@ -22,6 +21,9 @@ export default function ActivosPage() {
   const [puntos, setPuntos] = useState<PuntoTroya[]>([]);
   const [comprasPorPunto, setComprasPorPunto] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [minimoEdit, setMinimoEdit] = useState('');
+  const [exclusividadEdit, setExclusividadEdit] = useState(false);
 
   async function cargarActivos() {
     setCargando(true);
@@ -57,6 +59,44 @@ export default function ActivosPage() {
     cargarActivos();
   }, []);
 
+  function empezarEdicion(p: PuntoTroya) {
+    setEditandoId(p.id);
+    setMinimoEdit(p.minimo_trimestral ? String(p.minimo_trimestral) : '');
+    setExclusividadEdit(p.exclusividad_zona);
+  }
+
+  async function guardarEdicion(id: string) {
+    const { error } = await supabase
+      .from('puntos_troya')
+      .update({
+        minimo_trimestral: minimoEdit ? Number(minimoEdit) : null,
+        exclusividad_zona: exclusividadEdit,
+      })
+      .eq('id', id);
+
+    if (error) {
+      alert('Error al guardar: ' + error.message);
+      return;
+    }
+
+    setEditandoId(null);
+    cargarActivos();
+  }
+
+  async function eliminarPunto(p: PuntoTroya) {
+    const confirmado = confirm(
+      `¿Eliminar el Punto Troya de "${p.clientes?.nombre}"? Esto también borra su historial de compras mensuales cargado. El cliente en sí no se borra.`
+    );
+    if (!confirmado) return;
+
+    const { error } = await supabase.from('puntos_troya').delete().eq('id', p.id);
+    if (error) {
+      alert('No se pudo eliminar: ' + error.message);
+      return;
+    }
+    cargarActivos();
+  }
+
   return (
     <div>
       <div className="troya-header">
@@ -80,8 +120,33 @@ export default function ActivosPage() {
             const minimo = p.minimo_trimestral ?? 0;
             const porcentaje = minimo > 0 ? Math.round((comprado / minimo) * 100) : 0;
 
+            if (editandoId === p.id) {
+              return (
+                <div key={p.id} className="troya-card troya-card-editando">
+                  <h3>{p.clientes?.nombre}</h3>
+                  <div className="troya-form">
+                    <input
+                      className="troya-input"
+                      type="number"
+                      placeholder="Mínimo trimestral"
+                      value={minimoEdit}
+                      onChange={(e) => setMinimoEdit(e.target.value)}
+                    />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                      <input type="checkbox" checked={exclusividadEdit} onChange={(e) => setExclusividadEdit(e.target.checked)} />
+                      Exclusividad de zona
+                    </label>
+                  </div>
+                  <div className="troya-card-acciones">
+                    <button className="troya-btn" onClick={() => guardarEdicion(p.id)}>Guardar cambios</button>
+                    <button className="troya-btn troya-btn-secundario" onClick={() => setEditandoId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              );
+            }
+
             return (
-              <Link key={p.id} href={`/activos/${p.id}`} className={`troya-card ${porcentaje >= 100 ? 'troya-card--activo' : 'troya-card--alerta'}`}>
+              <div key={p.id} className={`troya-card ${porcentaje >= 100 ? 'troya-card--activo' : 'troya-card--alerta'}`}>
                 <div className="troya-card-info">
                   <h3>{p.clientes?.nombre}</h3>
                   <p>
@@ -90,11 +155,38 @@ export default function ActivosPage() {
                   </p>
                 </div>
                 <CumplimientoGauge porcentaje={porcentaje} />
-              </Link>
+                <div className="troya-card-acciones">
+                  <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
+                    <IconLapiz />
+                  </button>
+                  <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPunto(p)} title="Eliminar">
+                    <IconTacho />
+                  </button>
+                </div>
+              </div>
             );
           })}
         </div>
       )}
     </div>
+  );
+}
+
+function IconLapiz() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
+    </svg>
+  );
+}
+
+function IconTacho() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2" />
+      <path d="M19 6l-1 14a1 1 0 01-1 1H7a1 1 0 01-1-1L5 6" />
+    </svg>
   );
 }

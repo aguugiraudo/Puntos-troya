@@ -141,7 +141,7 @@ export default function ClientesPage() {
       ) : clientes.length === 0 ? (
         <div className="troya-vacio">
           <h3>Todavía no cargaste ningún cliente</h3>
-          <p>Usá "Nuevo cliente" arriba para dar de alta el primero.</p>
+          <p>Usá &ldquo;Nuevo cliente&rdquo; arriba para dar de alta el primero.</p>
         </div>
       ) : (
         <div className="troya-lista">
