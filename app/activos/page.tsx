@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import CumplimientoGauge from '@/components/CumplimientoGauge';
+import InputMoneda from '@/components/InputMoneda';
 
 type PuntoTroya = {
   id: string;
@@ -17,13 +18,22 @@ function inicioTrimestreActual(): Date {
   return new Date(hoy.getFullYear(), inicioTrimestre, 1);
 }
 
+function primerDiaMesActual(): string {
+  const hoy = new Date();
+  return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+}
+
 export default function ActivosPage() {
   const [puntos, setPuntos] = useState<PuntoTroya[]>([]);
   const [comprasPorPunto, setComprasPorPunto] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
+
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [minimoEdit, setMinimoEdit] = useState('');
   const [exclusividadEdit, setExclusividadEdit] = useState(false);
+
+  const [cargandoCompraId, setCargandoCompraId] = useState<string | null>(null);
+  const [montoCompra, setMontoCompra] = useState('');
 
   async function cargarActivos() {
     setCargando(true);
@@ -97,6 +107,32 @@ export default function ActivosPage() {
     cargarActivos();
   }
 
+  function empezarCargaCompra(id: string) {
+    setCargandoCompraId(id);
+    setMontoCompra('');
+  }
+
+  async function guardarCompra(puntoId: string) {
+    if (!montoCompra) return;
+
+    const { error } = await supabase.from('compras_mensuales').upsert(
+      {
+        punto_troya_id: puntoId,
+        mes: primerDiaMesActual(),
+        monto: Number(montoCompra),
+      },
+      { onConflict: 'punto_troya_id,mes' }
+    );
+
+    if (error) {
+      alert('Error al cargar la compra: ' + error.message);
+      return;
+    }
+
+    setCargandoCompraId(null);
+    cargarActivos();
+  }
+
   return (
     <div>
       <div className="troya-header">
@@ -125,13 +161,7 @@ export default function ActivosPage() {
                 <div key={p.id} className="troya-card troya-card-editando">
                   <h3>{p.clientes?.nombre}</h3>
                   <div className="troya-form">
-                    <input
-                      className="troya-input"
-                      type="number"
-                      placeholder="Mínimo trimestral"
-                      value={minimoEdit}
-                      onChange={(e) => setMinimoEdit(e.target.value)}
-                    />
+                    <InputMoneda value={minimoEdit} onChange={setMinimoEdit} placeholder="Mínimo trimestral" />
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
                       <input type="checkbox" checked={exclusividadEdit} onChange={(e) => setExclusividadEdit(e.target.checked)} />
                       Exclusividad de zona
@@ -140,6 +170,22 @@ export default function ActivosPage() {
                   <div className="troya-card-acciones">
                     <button className="troya-btn" onClick={() => guardarEdicion(p.id)}>Guardar cambios</button>
                     <button className="troya-btn troya-btn-secundario" onClick={() => setEditandoId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              );
+            }
+
+            if (cargandoCompraId === p.id) {
+              return (
+                <div key={p.id} className="troya-card troya-card-editando">
+                  <h3>{p.clientes?.nombre}</h3>
+                  <p className="troya-subtitulo" style={{ margin: 0 }}>Compra de este mes (se suma al trimestre en curso)</p>
+                  <div className="troya-form">
+                    <InputMoneda value={montoCompra} onChange={setMontoCompra} placeholder="Monto comprado este mes" />
+                  </div>
+                  <div className="troya-card-acciones">
+                    <button className="troya-btn" onClick={() => guardarCompra(p.id)}>Guardar compra</button>
+                    <button className="troya-btn troya-btn-secundario" onClick={() => setCargandoCompraId(null)}>Cancelar</button>
                   </div>
                 </div>
               );
@@ -156,6 +202,9 @@ export default function ActivosPage() {
                 </div>
                 <CumplimientoGauge porcentaje={porcentaje} />
                 <div className="troya-card-acciones">
+                  <button className="troya-icon-btn" onClick={() => empezarCargaCompra(p.id)} title="Cargar compra del mes">
+                    <IconMoneda />
+                  </button>
                   <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
                     <IconLapiz />
                   </button>
@@ -169,6 +218,15 @@ export default function ActivosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IconMoneda() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v10M9.5 9.5c0-1.4 1.1-2 2.5-2s2.5.7 2.5 2-1.1 1.7-2.5 2-2.5.6-2.5 2 1.1 2 2.5 2 2.5-.6 2.5-2" />
+    </svg>
   );
 }
 

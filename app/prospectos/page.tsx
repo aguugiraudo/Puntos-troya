@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import InputMoneda from '@/components/InputMoneda';
 
 type Cliente = { id: string; nombre: string };
 
@@ -138,13 +139,7 @@ export default function ProspectosPage() {
                   <option key={c.id} value={c.id}>{c.nombre}</option>
                 ))}
               </select>
-              <input
-                className="troya-input"
-                placeholder="Mínimo trimestral propuesto"
-                type="number"
-                value={minimo}
-                onChange={(e) => setMinimo(e.target.value)}
-              />
+              <InputMoneda value={minimo} onChange={setMinimo} placeholder="Mínimo trimestral propuesto" />
               <button type="submit" className="troya-btn">Registrar</button>
             </form>
           </div>
@@ -165,15 +160,8 @@ export default function ProspectosPage() {
               <div className="troya-card-info">
                 <h3>{p.clientes?.nombre}</h3>
                 {editandoId === p.id ? (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-                    <input
-                      className="troya-input"
-                      style={{ flex: '0 0 160px' }}
-                      type="number"
-                      value={minimoEdit}
-                      onChange={(e) => setMinimoEdit(e.target.value)}
-                      placeholder="Mínimo trimestral"
-                    />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <InputMoneda value={minimoEdit} onChange={setMinimoEdit} placeholder="Mínimo trimestral" />
                     <button className="troya-btn" onClick={() => guardarMinimo(p.id)}>Guardar</button>
                     <button className="troya-btn troya-btn-secundario" onClick={() => setEditandoId(null)}>Cancelar</button>
                   </div>
