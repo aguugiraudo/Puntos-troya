@@ -228,20 +228,22 @@ export default function ActivosPage() {
                     {p.exclusividad_zona ? ' · Exclusividad de zona' : ''}
                   </p>
                 </div>
-                <CumplimientoGauge porcentaje={porcentaje} />
-                <div className="troya-card-acciones">
-                  <button className="troya-icon-btn" onClick={() => router.push(`/activos/${p.id}`)} title="Ver ficha completa">
-                    <IconOjo />
-                  </button>
-                  <button className="troya-icon-btn" onClick={() => empezarCargaCompra(p.id)} title="Cargar compra del mes">
-                    <IconMoneda />
-                  </button>
-                  <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
-                    <IconLapiz />
-                  </button>
-                  <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPunto(p)} title="Eliminar">
-                    <IconTacho />
-                  </button>
+                <div className="troya-card-derecha">
+                  <CumplimientoGauge porcentaje={porcentaje} />
+                  <div className="troya-card-acciones">
+                    <button className="troya-icon-btn" onClick={() => router.push(`/activos/${p.id}`)} title="Ver ficha completa">
+                      <IconOjo />
+                    </button>
+                    <button className="troya-icon-btn" onClick={() => empezarCargaCompra(p.id)} title="Cargar compra del mes">
+                      <IconMoneda />
+                    </button>
+                    <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
+                      <IconLapiz />
+                    </button>
+                    <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPunto(p)} title="Eliminar">
+                      <IconTacho />
+                    </button>
+                  </div>
                 </div>
               </div>
             );

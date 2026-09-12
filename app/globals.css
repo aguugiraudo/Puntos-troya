@@ -235,6 +235,66 @@ h1, h2, h3 {
   font-family: var(--font-body);
 }
 
+/* ---------- HUB "MÁS" ---------- */
+.troya-hub-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.troya-hub-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.18s, border-color 0.18s;
+}
+
+.troya-hub-card:hover {
+  box-shadow: 0 6px 20px rgba(28, 21, 18, 0.08);
+  border-color: #E0D5CB;
+}
+
+.troya-hub-card-icono {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  border-radius: 12px;
+  background: var(--tint-orange);
+  color: var(--orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.troya-hub-card-icono svg {
+  width: 22px;
+  height: 22px;
+}
+
+.troya-hub-card-texto h3 {
+  font-size: 15.5px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.troya-hub-card-texto p {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .troya-hub-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* ---------- MAPA ---------- */
 .troya-mapa-wrapper {
   position: relative;
@@ -261,6 +321,19 @@ h1, h2, h3 {
   }
 }
 
+/* ---------- SALDO DE PUNTOS ---------- */
+.troya-saldo-puntos {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--orange);
+}
+
+.troya-saldo-detalle {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ---------- RESPONSIVE: escritorio ---------- */
 @media (min-width: 768px) {
   .troya-topbar-links { display: flex; }
@@ -282,6 +355,9 @@ h1, h2, h3 {
   }
   .troya-stats {
     grid-template-columns: repeat(4, 1fr);
+  }
+  .troya-hub-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
   .troya-buscador { max-width: 420px; }
   .troya-panel-body form.troya-form { max-width: 900px; }
@@ -398,9 +474,10 @@ h1, h2, h3 {
   border-radius: 13px;
   padding: 16px 18px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px 16px;
   text-decoration: none;
   color: inherit;
   position: relative;
@@ -424,6 +501,11 @@ h1, h2, h3 {
   border-color: #E0D5CB;
 }
 
+.troya-card-info {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
 .troya-card-info h3 {
   font-size: 16.5px;
   font-weight: 700;
@@ -444,6 +526,22 @@ h1, h2, h3 {
 }
 
 .troya-card-editando .troya-form { padding-top: 0; }
+
+.troya-card-derecha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+@media (max-width: 520px) {
+  .troya-card-derecha {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
+}
 
 /* ---------- ACCIONES (editar / eliminar) ---------- */
 .troya-card-acciones {
@@ -488,17 +586,27 @@ h1, h2, h3 {
   color: #fff;
 }
 
+@media (max-width: 380px) {
+  .troya-icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .troya-card-acciones {
+    gap: 6px;
+  }
+}
+
 /* ---------- INDICADOR DE CUMPLIMIENTO (llama) ---------- */
 .troya-gauge {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 5px;
-  min-width: 88px;
+  min-width: 70px;
 }
 
 .troya-gauge-track {
-  width: 88px;
+  width: 70px;
   height: 6px;
   background: var(--line);
   border-radius: 4px;

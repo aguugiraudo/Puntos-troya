@@ -182,7 +182,7 @@ export default function ProspectosPage() {
       ) : (
         <div className="troya-lista">
           {prospectosFiltrados.map((p) => (
-            <div key={p.id} className="troya-card" style={{ flexWrap: 'wrap' }}>
+            <div key={p.id} className="troya-card">
               <div className="troya-card-info">
                 <h3>{p.clientes?.nombre}</h3>
                 {editandoId === p.id ? (
@@ -198,7 +198,7 @@ export default function ProspectosPage() {
                   </p>
                 )}
               </div>
-              <div className="troya-card-acciones" style={{ alignItems: 'center' }}>
+              <div className="troya-card-derecha">
                 <select
                   className="troya-input"
                   style={{ flex: '0 0 auto' }}
@@ -209,12 +209,14 @@ export default function ProspectosPage() {
                     <option key={e.valor} value={e.valor}>{e.etiqueta}</option>
                   ))}
                 </select>
-                <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar mínimo">
-                  <IconLapiz />
-                </button>
-                <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProspecto(p)} title="Eliminar">
-                  <IconTacho />
-                </button>
+                <div className="troya-card-acciones">
+                  <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar mínimo">
+                    <IconLapiz />
+                  </button>
+                  <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProspecto(p)} title="Eliminar">
+                    <IconTacho />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
