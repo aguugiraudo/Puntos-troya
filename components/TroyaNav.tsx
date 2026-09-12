@@ -9,11 +9,16 @@ const ITEMS = [
   { href: '/clientes', label: 'Clientes', icon: IconClientes },
   { href: '/activos', label: 'Activos', icon: IconActivos },
   { href: '/prospectos', label: 'Prospectos', icon: IconProspectos },
-  { href: '/mapa', label: 'Mapa', icon: IconMapa },
+  { href: '/mas', label: 'Más', icon: IconMas },
 ];
 
 export default function TroyaNav() {
   const pathname = usePathname();
+
+  function esActivo(href: string) {
+    if (href === '/') return pathname === '/';
+    return pathname.startsWith(href);
+  }
 
   return (
     <>
@@ -28,11 +33,7 @@ export default function TroyaNav() {
         />
         <nav className="troya-topbar-links">
           {ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={pathname === item.href ? 'activo' : ''}
-            >
+            <Link key={item.href} href={item.href} className={esActivo(item.href) ? 'activo' : ''}>
               {item.label}
             </Link>
           ))}
@@ -43,11 +44,7 @@ export default function TroyaNav() {
         {ITEMS.map((item) => {
           const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={pathname === item.href ? 'activo' : ''}
-            >
+            <Link key={item.href} href={item.href} className={esActivo(item.href) ? 'activo' : ''}>
               <Icon />
               <span>{item.label}</span>
             </Link>
@@ -96,11 +93,12 @@ function IconProspectos() {
   );
 }
 
-function IconMapa() {
+function IconMas() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 21s-7-6.1-7-11a7 7 0 0114 0c0 4.9-7 11-7 11z" />
-      <circle cx="12" cy="10" r="2.5" />
+      <circle cx="5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="19" cy="12" r="1.6" />
     </svg>
   );
 }
