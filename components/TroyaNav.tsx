@@ -9,6 +9,7 @@ const ITEMS = [
   { href: '/clientes', label: 'Clientes', icon: IconClientes },
   { href: '/activos', label: 'Activos', icon: IconActivos },
   { href: '/prospectos', label: 'Prospectos', icon: IconProspectos },
+  { href: '/mapa', label: 'Mapa', icon: IconMapa },
 ];
 
 export default function TroyaNav() {
@@ -91,6 +92,15 @@ function IconProspectos() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="4" y="3" width="16" height="18" rx="2" />
       <path d="M8 8h8M8 12h8M8 16h5" />
+    </svg>
+  );
+}
+
+function IconMapa() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 21s-7-6.1-7-11a7 7 0 0114 0c0 4.9-7 11-7 11z" />
+      <circle cx="12" cy="10" r="2.5" />
     </svg>
   );
 }
