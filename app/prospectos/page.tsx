@@ -23,6 +23,7 @@ const ESTADOS = [
 export default function ProspectosPage() {
   const [prospectos, setProspectos] = useState<Prospecto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [busqueda, setBusqueda] = useState('');
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [clienteId, setClienteId] = useState('');
   const [minimo, setMinimo] = useState('');
@@ -49,6 +50,14 @@ export default function ProspectosPage() {
   useEffect(() => {
     cargarTodo();
   }, []);
+
+  const prospectosFiltrados = prospectos.filter((p) => {
+    const texto = busqueda.trim().toLowerCase();
+    if (!texto) return true;
+    return [p.clientes?.nombre, p.clientes?.localidad, p.clientes?.provincia]
+      .filter(Boolean)
+      .some((campo) => campo!.toLowerCase().includes(texto));
+  });
 
   async function crearProspecto(e: React.FormEvent) {
     e.preventDefault();
@@ -121,8 +130,20 @@ export default function ProspectosPage() {
       <div className="troya-header">
         <div>
           <h1>Prospectos</h1>
-          <p className="troya-subtitulo">{prospectos.length} en seguimiento</p>
+          <p className="troya-subtitulo">
+            {busqueda ? `${prospectosFiltrados.length} de ${prospectos.length}` : `${prospectos.length} en seguimiento`}
+          </p>
         </div>
+      </div>
+
+      <div className="troya-buscador">
+        <IconBuscar />
+        <input
+          type="text"
+          placeholder="Buscar por nombre, localidad o provincia..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
       </div>
 
       <div className="troya-panel">
@@ -153,9 +174,14 @@ export default function ProspectosPage() {
           <h3>No hay prospectos en seguimiento</h3>
           <p>Si el cliente todavía no existe, primero cargalo en Clientes.</p>
         </div>
+      ) : prospectosFiltrados.length === 0 ? (
+        <div className="troya-vacio">
+          <h3>No hay resultados para &ldquo;{busqueda}&rdquo;</h3>
+          <p>Probá con otro nombre, localidad o provincia.</p>
+        </div>
       ) : (
         <div className="troya-lista">
-          {prospectos.map((p) => (
+          {prospectosFiltrados.map((p) => (
             <div key={p.id} className="troya-card" style={{ flexWrap: 'wrap' }}>
               <div className="troya-card-info">
                 <h3>{p.clientes?.nombre}</h3>
@@ -195,6 +221,15 @@ export default function ProspectosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IconBuscar() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
   );
 }
 

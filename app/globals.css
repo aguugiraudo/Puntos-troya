@@ -109,12 +109,6 @@ h1, h2, h3 {
   color: var(--red);
 }
 
-@media (min-width: 768px) {
-  .troya-topbar-links { display: flex; }
-  .troya-bottomnav { display: none; }
-  .troya-main { padding-bottom: 48px; }
-}
-
 /* ---------- CONTENIDO ---------- */
 .troya-main {
   padding: 28px 20px 90px;
@@ -141,6 +135,65 @@ h1, h2, h3 {
   color: var(--muted);
   font-size: 13.5px;
   margin-top: 3px;
+}
+
+/* ---------- BUSCADOR ---------- */
+.troya-buscador {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.troya-buscador svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 17px;
+  height: 17px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.troya-buscador input {
+  width: 100%;
+  padding: 12px 14px 12px 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.troya-buscador input::placeholder { color: #B5AAA0; }
+
+.troya-buscador input:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(235, 103, 38, 0.13);
+}
+
+/* ---------- RESPONSIVE: escritorio ---------- */
+@media (min-width: 768px) {
+  .troya-topbar-links { display: flex; }
+  .troya-bottomnav { display: none; }
+  .troya-main { padding-bottom: 48px; }
+}
+
+@media (min-width: 1024px) {
+  .troya-topbar { padding: 20px 40px; }
+  .troya-topbar-logo { height: 32px; }
+  .troya-topbar-links { gap: 38px; }
+  .troya-topbar-links a { font-size: 15.5px; }
+  .troya-main { max-width: 1240px; padding: 40px 40px 60px; }
+  .troya-header h1 { font-size: 32px; }
+  .troya-lista {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 14px;
+  }
+  .troya-buscador { max-width: 420px; }
+  .troya-panel-body form.troya-form { max-width: 900px; }
 }
 
 /* ---------- PANEL DE ALTA (colapsable) ---------- */

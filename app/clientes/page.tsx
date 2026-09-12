@@ -14,6 +14,7 @@ type Cliente = {
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [busqueda, setBusqueda] = useState('');
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [nombre, setNombre] = useState('');
   const [localidad, setLocalidad] = useState('');
@@ -34,6 +35,14 @@ export default function ClientesPage() {
   useEffect(() => {
     cargarClientes();
   }, []);
+
+  const clientesFiltrados = clientes.filter((c) => {
+    const texto = busqueda.trim().toLowerCase();
+    if (!texto) return true;
+    return [c.nombre, c.localidad, c.provincia, c.contacto]
+      .filter(Boolean)
+      .some((campo) => campo!.toLowerCase().includes(texto));
+  });
 
   async function crearCliente(e: React.FormEvent) {
     e.preventDefault();
@@ -113,8 +122,20 @@ export default function ClientesPage() {
       <div className="troya-header">
         <div>
           <h1>Clientes</h1>
-          <p className="troya-subtitulo">{clientes.length} cargados</p>
+          <p className="troya-subtitulo">
+            {busqueda ? `${clientesFiltrados.length} de ${clientes.length}` : `${clientes.length} cargados`}
+          </p>
         </div>
+      </div>
+
+      <div className="troya-buscador">
+        <IconBuscar />
+        <input
+          type="text"
+          placeholder="Buscar por nombre, localidad o provincia..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
       </div>
 
       <div className="troya-panel">
@@ -143,9 +164,14 @@ export default function ClientesPage() {
           <h3>Todavía no cargaste ningún cliente</h3>
           <p>Usá &ldquo;Nuevo cliente&rdquo; arriba para dar de alta el primero.</p>
         </div>
+      ) : clientesFiltrados.length === 0 ? (
+        <div className="troya-vacio">
+          <h3>No hay resultados para &ldquo;{busqueda}&rdquo;</h3>
+          <p>Probá con otro nombre, localidad o provincia.</p>
+        </div>
       ) : (
         <div className="troya-lista">
-          {clientes.map((c) =>
+          {clientesFiltrados.map((c) =>
             editandoId === c.id ? (
               <div key={c.id} className="troya-card troya-card-editando">
                 <div className="troya-form">
@@ -184,6 +210,15 @@ export default function ClientesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IconBuscar() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
   );
 }
 

@@ -28,6 +28,7 @@ export default function ActivosPage() {
   const router = useRouter();
   const [puntos, setPuntos] = useState<PuntoTroya[]>([]);
   const [comprasPorPunto, setComprasPorPunto] = useState<Record<string, number>>({});
+  const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -70,6 +71,14 @@ export default function ActivosPage() {
   useEffect(() => {
     cargarActivos();
   }, []);
+
+  const puntosFiltrados = puntos.filter((p) => {
+    const texto = busqueda.trim().toLowerCase();
+    if (!texto) return true;
+    return [p.clientes?.nombre, p.clientes?.localidad, p.clientes?.provincia]
+      .filter(Boolean)
+      .some((campo) => campo!.toLowerCase().includes(texto));
+  });
 
   function empezarEdicion(p: PuntoTroya) {
     setEditandoId(p.id);
@@ -140,8 +149,20 @@ export default function ActivosPage() {
       <div className="troya-header">
         <div>
           <h1>Puntos Troya Activos</h1>
-          <p className="troya-subtitulo">{puntos.length} confirmados</p>
+          <p className="troya-subtitulo">
+            {busqueda ? `${puntosFiltrados.length} de ${puntos.length}` : `${puntos.length} confirmados`}
+          </p>
         </div>
+      </div>
+
+      <div className="troya-buscador">
+        <IconBuscar />
+        <input
+          type="text"
+          placeholder="Buscar por nombre, localidad o provincia..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
       </div>
 
       {cargando ? (
@@ -151,9 +172,14 @@ export default function ActivosPage() {
           <h3>Todavía no hay Puntos Troya confirmados</h3>
           <p>Cuando confirmes un prospecto, va a aparecer acá con su cumplimiento trimestral.</p>
         </div>
+      ) : puntosFiltrados.length === 0 ? (
+        <div className="troya-vacio">
+          <h3>No hay resultados para &ldquo;{busqueda}&rdquo;</h3>
+          <p>Probá con otro nombre, localidad o provincia.</p>
+        </div>
       ) : (
         <div className="troya-lista">
-          {puntos.map((p) => {
+          {puntosFiltrados.map((p) => {
             const comprado = comprasPorPunto[p.id] ?? 0;
             const minimo = p.minimo_trimestral ?? 0;
             const porcentaje = minimo > 0 ? Math.round((comprado / minimo) * 100) : 0;
@@ -223,6 +249,15 @@ export default function ActivosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IconBuscar() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
   );
 }
 
