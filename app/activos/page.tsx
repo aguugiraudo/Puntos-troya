@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import CumplimientoGauge from '@/components/CumplimientoGauge';
 import InputMoneda from '@/components/InputMoneda';
@@ -24,6 +25,7 @@ function primerDiaMesActual(): string {
 }
 
 export default function ActivosPage() {
+  const router = useRouter();
   const [puntos, setPuntos] = useState<PuntoTroya[]>([]);
   const [comprasPorPunto, setComprasPorPunto] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
@@ -202,6 +204,9 @@ export default function ActivosPage() {
                 </div>
                 <CumplimientoGauge porcentaje={porcentaje} />
                 <div className="troya-card-acciones">
+                  <button className="troya-icon-btn" onClick={() => router.push(`/activos/${p.id}`)} title="Ver ficha completa">
+                    <IconOjo />
+                  </button>
                   <button className="troya-icon-btn" onClick={() => empezarCargaCompra(p.id)} title="Cargar compra del mes">
                     <IconMoneda />
                   </button>
@@ -218,6 +223,15 @@ export default function ActivosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IconOjo() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   );
 }
 
