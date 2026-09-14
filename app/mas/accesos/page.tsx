@@ -76,6 +76,10 @@ export default function AccesosPage() {
       return;
     }
 
+    if (data.vinculadoExistente) {
+      alert(`${nombreNuevo} ya tenía una cuenta (de otra app de Troya) y quedó vinculado a Puntos Troya. Va a entrar con la contraseña que ya usaba, no con la que pusiste ahora.`);
+    }
+
     setNombreNuevo('');
     setEmailNuevo('');
     setPasswordNuevo('');
@@ -139,15 +143,18 @@ export default function AccesosPage() {
         </button>
         {panelAbierto && (
           <div className="troya-panel-body">
+            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
+              Si la persona ya usa otra app de Troya con ese email, se vincula automáticamente (mantiene su contraseña actual).
+            </p>
             <form onSubmit={crearUsuario} className="troya-form">
               <input className="troya-input" placeholder="Nombre" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} required />
               <input className="troya-input" type="email" placeholder="Email" value={emailNuevo} onChange={(e) => setEmailNuevo(e.target.value)} required />
-              <input className="troya-input" type="password" placeholder="Contraseña provisoria" value={passwordNuevo} onChange={(e) => setPasswordNuevo(e.target.value)} required minLength={6} />
+              <input className="troya-input" type="password" placeholder="Contraseña provisoria" value={passwordNuevo} onChange={(e) => setPasswordNuevo(e.target.value)} minLength={6} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
                 <input type="checkbox" checked={esDuenoNuevo} onChange={(e) => setEsDuenoNuevo(e.target.checked)} />
                 Acceso total (dueño)
               </label>
-              <button type="submit" className="troya-btn" disabled={creando}>{creando ? 'Creando...' : 'Crear usuario'}</button>
+              <button type="submit" className="troya-btn" disabled={creando}>{creando ? 'Procesando...' : 'Crear / vincular usuario'}</button>
             </form>
             {errorCreacion && <p style={{ color: '#DA231F', fontSize: 13, marginTop: 8 }}>{errorCreacion}</p>}
           </div>
