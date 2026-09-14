@@ -6,18 +6,23 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 
 const ITEMS = [
-  { href: '/', label: 'Inicio', icon: IconInicio, modulo: null as string | null },
-  { href: '/clientes', label: 'Clientes', icon: IconClientes, modulo: 'clientes' },
-  { href: '/activos', label: 'Activos', icon: IconActivos, modulo: 'activos' },
-  { href: '/prospectos', label: 'Prospectos', icon: IconProspectos, modulo: 'prospectos' },
-  { href: '/mas', label: 'Más', icon: IconMas, modulo: null },
+  { href: '/', label: 'Inicio', icon: IconInicio, modulo: null as string | null, soloDueno: false },
+  { href: '/clientes', label: 'Clientes', icon: IconClientes, modulo: 'clientes', soloDueno: false },
+  { href: '/activos', label: 'Activos', icon: IconActivos, modulo: 'activos', soloDueno: false },
+  { href: '/prospectos', label: 'Prospectos', icon: IconProspectos, modulo: 'prospectos', soloDueno: false },
+  { href: '/comercial', label: 'Comercial', icon: IconComercial, modulo: null, soloDueno: true },
+  { href: '/mas', label: 'Más', icon: IconMas, modulo: null, soloDueno: false },
 ];
 
 export default function TroyaNav() {
   const pathname = usePathname();
   const { puedeVer, usuario, cerrarSesion } = useAuth();
 
-  const itemsVisibles = ITEMS.filter((item) => !item.modulo || puedeVer(item.modulo));
+  const itemsVisibles = ITEMS.filter((item) => {
+    if (item.soloDueno) return usuario?.es_dueno;
+    if (item.modulo) return puedeVer(item.modulo);
+    return true;
+  });
 
   function esActivo(href: string) {
     if (href === '/') return pathname === '/';
@@ -70,7 +75,6 @@ function IconInicio() {
     </svg>
   );
 }
-
 function IconClientes() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -81,7 +85,6 @@ function IconClientes() {
     </svg>
   );
 }
-
 function IconActivos() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -90,7 +93,6 @@ function IconActivos() {
     </svg>
   );
 }
-
 function IconProspectos() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -99,7 +101,14 @@ function IconProspectos() {
     </svg>
   );
 }
-
+function IconComercial() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1v22" />
+      <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+    </svg>
+  );
+}
 function IconMas() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

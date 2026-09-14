@@ -57,7 +57,6 @@ function IconMapa() {
     </svg>
   );
 }
-
 function IconPuntos() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,7 +65,6 @@ function IconPuntos() {
     </svg>
   );
 }
-
 function IconMinimos() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -75,7 +73,6 @@ function IconMinimos() {
     </svg>
   );
 }
-
 function IconPlaca() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -85,7 +82,6 @@ function IconPlaca() {
     </svg>
   );
 }
-
 function IconAccesos() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

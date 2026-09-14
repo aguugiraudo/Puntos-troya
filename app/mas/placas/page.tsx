@@ -74,7 +74,7 @@ export default function PlacasPage() {
       link.download = `propuesta-${nombreCliente || 'punto-troya'}.png`;
       link.href = dataUrl;
       link.click();
-    } catch (e) {
+    } catch {
       alert('Error al generar la imagen. Probá de nuevo.');
     } finally {
       setGenerando(false);
@@ -92,7 +92,6 @@ export default function PlacasPage() {
         </div>
       </div>
 
-      {/* FORMULARIO */}
       <div className="troya-panel" style={{ marginBottom: 20 }}>
         <div className="troya-panel-body" style={{ borderTop: 'none', paddingTop: 16 }}>
           <div className="troya-form">
@@ -120,75 +119,69 @@ export default function PlacasPage() {
         {generando ? 'Generando...' : 'Descargar placa (PNG)'}
       </button>
 
-      {/* PREVIEW / PLACA A EXPORTAR */}
       <div style={{ overflowX: 'auto' }}>
         <div ref={placaRef} style={{ width: 900, height: 1125, position: 'relative', fontFamily: 'var(--font-body)', overflow: 'hidden', background: '#1C1512' }}>
-          {/* Foto de fondo como <img> real (necesario para que html-to-image la incluya en la descarga) */}
           <img
             src="/placas/fondo-placa.jpg"
             alt=""
             crossOrigin="anonymous"
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%' }}
           />
-
-          {/* velo oscuro pareja sobre toda la foto */}
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,7,6,0.45)' }} />
-
-          {/* llama decorativa esquina inferior derecha */}
           <img
             src="/logo/isotipo_llama_naranja.png"
             alt=""
             crossOrigin="anonymous"
-            style={{ position: 'absolute', bottom: -20, right: -30, width: 190, opacity: 0.9 }}
+            style={{ position: 'absolute', bottom: -20, right: -30, width: 220, opacity: 0.9 }}
           />
 
-          {/* PANEL DE CONTENIDO (ordena y da legibilidad) */}
           <div
             style={{
               position: 'absolute',
-              top: 60,
+              top: 50,
               left: 40,
               right: 40,
-              background: 'rgba(12,9,7,0.72)',
-              borderRadius: 22,
-              padding: '34px 36px',
+              bottom: 130,
+              background: 'rgba(12,9,7,0.74)',
+              borderRadius: 24,
+              padding: '48px 50px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
             }}
           >
-            {/* Nombre + tagline */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-              <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', padding: '9px 20px', borderRadius: 8 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: '#fff' }}>
-                  {nombreCliente || 'NOMBRE DEL CLIENTE'}
-                </span>
+            <div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 28 }}>
+                <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', padding: '13px 28px', borderRadius: 10 }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 27, fontWeight: 700, color: '#fff' }}>
+                    {nombreCliente || 'NOMBRE DEL CLIENTE'}
+                  </span>
+                </div>
+                <div style={{ background: '#DA231F', padding: '13px 28px', borderRadius: 10 }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#fff' }}>
+                    {tagline}
+                  </span>
+                </div>
               </div>
-              <div style={{ background: '#DA231F', padding: '9px 20px', borderRadius: 8 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#fff' }}>
-                  {tagline}
-                </span>
-              </div>
+
+              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 50, fontWeight: 700, color: '#fff', margin: '0 0 44px', lineHeight: 1.12 }}>
+                {titulo}
+              </h1>
             </div>
 
-            {/* Título */}
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 700, color: '#fff', margin: '0 0 30px', lineHeight: 1.15 }}>
-              {titulo}
-            </h1>
-
-            {/* Dos columnas */}
-            <div style={{ display: 'flex', gap: 28 }}>
+            <div style={{ display: 'flex', gap: 40 }}>
               <ColumnaPlaca icono={<IconBeneficios />} titulo="BENEFICIOS" items={beneficios} />
-              <div style={{ width: 1, background: 'rgba(255,255,255,0.2)' }} />
+              <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
               <ColumnaPlaca icono={<IconRequisitos />} titulo="REQUISITOS" items={requisitos} />
             </div>
           </div>
 
-          {/* Fecha */}
-          <div style={{ position: 'absolute', left: 40, bottom: 78, background: '#DA231F', padding: '7px 16px', borderRadius: 5 }}>
-            <span style={{ color: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fechaFormateada}</span>
+          <div style={{ position: 'absolute', left: 40, bottom: 78, background: '#DA231F', padding: '9px 20px', borderRadius: 6 }}>
+            <span style={{ color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fechaFormateada}</span>
           </div>
 
-          {/* Logo TROYA */}
-          <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, textAlign: 'center' }}>
-            <img src="/logo/logo_troya_blanco_transparente.png" alt="Troya" crossOrigin="anonymous" style={{ height: 30 }} />
+          <div style={{ position: 'absolute', bottom: 30, left: 0, right: 0, textAlign: 'center' }}>
+            <img src="/logo/logo_troya_blanco_transparente.png" alt="Troya" crossOrigin="anonymous" style={{ height: 34 }} />
           </div>
         </div>
       </div>
@@ -199,14 +192,14 @@ export default function PlacasPage() {
 function ColumnaPlaca({ icono, titulo, items }: { icono: React.ReactNode; titulo: string; items: Bullet[] }) {
   return (
     <div style={{ flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16 }}>
-        <div style={{ color: '#EB6726', width: 26, height: 26, flexShrink: 0 }}>{icono}</div>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: '#fff' }}>{titulo}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 20 }}>
+        <div style={{ color: '#EB6726', width: 34, height: 34, flexShrink: 0 }}>{icono}</div>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 23, fontWeight: 700, color: '#fff' }}>{titulo}</span>
       </div>
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 11 }}>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
         {items.filter((b) => b.negrita || b.texto).map((b) => (
-          <li key={b.id} style={{ display: 'flex', gap: 7, fontSize: 13.5, color: '#F0EAE4', lineHeight: 1.4 }}>
-            <span style={{ marginTop: 1 }}>•</span>
+          <li key={b.id} style={{ display: 'flex', gap: 9, fontSize: 17, color: '#F0EAE4', lineHeight: 1.45 }}>
+            <span style={{ marginTop: 2 }}>•</span>
             <span>
               {b.negrita && <strong style={{ color: '#fff' }}>{b.negrita} </strong>}
               {b.texto}
@@ -258,7 +251,6 @@ function IconBeneficios() {
     </svg>
   );
 }
-
 function IconRequisitos() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="100%" height="100%">
@@ -268,7 +260,6 @@ function IconRequisitos() {
     </svg>
   );
 }
-
 function IconTacho() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
