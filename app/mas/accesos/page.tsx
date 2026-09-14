@@ -127,6 +127,8 @@ export default function AccesosPage() {
     cargarTodo();
   }
 
+  const usuariosNoDueno = usuarios.filter((u) => !u.es_dueno);
+
   return (
     <div>
       <div className="troya-header">
@@ -161,13 +163,16 @@ export default function AccesosPage() {
         )}
       </div>
 
-      {cargando ? (
-        <p className="troya-subtitulo">Cargando...</p>
-      ) : (
-        <div className="troya-lista">
-          {usuarios.map((u) => (
-            <div key={u.id} className="troya-card troya-card-editando">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: 10 }}>
+      {/* USUARIOS */}
+      <div className="troya-seccion">
+        <div className="troya-seccion-titulo">Usuarios</div>
+
+        {cargando ? (
+          <p className="troya-subtitulo">Cargando...</p>
+        ) : (
+          <div className="troya-lista">
+            {usuarios.map((u) => (
+              <div key={u.id} className="troya-card">
                 <div className="troya-card-info">
                   <h3>{u.nombre} {u.es_dueno ? '· Dueño' : ''}</h3>
                   <p>{u.email} · {u.activo ? 'Activo' : 'Desactivado'}</p>
@@ -181,27 +186,51 @@ export default function AccesosPage() {
                   </button>
                 </div>
               </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-              {!u.es_dueno && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
-                  {modulos.map((m) => (
-                    <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
-                      <label style={{ fontSize: 12, color: 'var(--muted)' }}>{m.nombre}</label>
-                      <select
-                        className="troya-input"
-                        value={permisosPorUsuario[u.id]?.[m.codigo] ?? 'sin_acceso'}
-                        onChange={(e) => cambiarNivel(u.id, m.id, e.target.value as Nivel)}
-                      >
-                        <option value="sin_acceso">Sin acceso</option>
-                        <option value="lectura">Lectura</option>
-                        <option value="edicion">Edición</option>
-                      </select>
-                    </div>
+      {/* MATRIZ DE PERMISOS */}
+      {usuariosNoDueno.length > 0 && (
+        <div className="troya-seccion">
+          <div className="troya-seccion-titulo">Matriz de permisos</div>
+
+          <div className="troya-matriz-wrapper">
+            <table className="troya-matriz-tabla">
+              <thead>
+                <tr>
+                  <th>Módulo</th>
+                  {usuariosNoDueno.map((u) => (
+                    <th key={u.id}>{u.nombre}</th>
                   ))}
-                </div>
-              )}
-            </div>
-          ))}
+                </tr>
+              </thead>
+              <tbody>
+                {modulos.map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.nombre}</td>
+                    {usuariosNoDueno.map((u) => {
+                      const nivel = permisosPorUsuario[u.id]?.[m.codigo] ?? 'sin_acceso';
+                      return (
+                        <td key={u.id}>
+                          <select
+                            className={`troya-matriz-select troya-matriz-select--${nivel}`}
+                            value={nivel}
+                            onChange={(e) => cambiarNivel(u.id, m.id, e.target.value as Nivel)}
+                          >
+                            <option value="sin_acceso">Sin acceso</option>
+                            <option value="lectura">Solo ver</option>
+                            <option value="edicion">Editar</option>
+                          </select>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

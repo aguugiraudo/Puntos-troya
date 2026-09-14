@@ -334,6 +334,86 @@ h1, h2, h3 {
   color: var(--muted);
 }
 
+/* ---------- MATRIZ DE PERMISOS ---------- */
+.troya-matriz-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.troya-matriz-tabla {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.troya-matriz-tabla th,
+.troya-matriz-tabla td {
+  padding: 12px 16px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.troya-matriz-tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.troya-matriz-tabla th {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  background: var(--bg);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.troya-matriz-tabla td:first-child,
+.troya-matriz-tabla th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  font-weight: 600;
+  z-index: 1;
+}
+
+.troya-matriz-tabla th:first-child {
+  background: var(--bg);
+  z-index: 2;
+}
+
+.troya-matriz-select {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: var(--font-body);
+  cursor: pointer;
+  appearance: none;
+  padding-right: 24px;
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23948578' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+
+.troya-matriz-select--edicion {
+  background-color: #E3F3E4;
+  color: #2E7D32;
+}
+
+.troya-matriz-select--lectura {
+  background-color: #FFF3CD;
+  color: #8A6D00;
+}
+
+.troya-matriz-select--sin_acceso {
+  background-color: #F1EDE8;
+  color: var(--muted);
+}
+
 /* ---------- RESPONSIVE: escritorio ---------- */
 @media (min-width: 768px) {
   .troya-topbar-links { display: flex; }
