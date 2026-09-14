@@ -69,21 +69,19 @@ export default function PlacasPage() {
     setGenerando(true);
     try {
       const { toPng } = await import('html-to-image');
-      const dataUrl = await toPng(placaRef.current, { pixelRatio: 2 });
+      const dataUrl = await toPng(placaRef.current, { pixelRatio: 2, cacheBust: true });
       const link = document.createElement('a');
       link.download = `propuesta-${nombreCliente || 'punto-troya'}.png`;
       link.href = dataUrl;
       link.click();
-    } catch {
+    } catch (e) {
       alert('Error al generar la imagen. Probá de nuevo.');
     } finally {
       setGenerando(false);
     }
   }
 
-  const fechaFormateada = fecha
-    ? new Date(fecha + 'T00:00:00').toLocaleDateString('es-AR')
-    : '';
+  const fechaFormateada = fecha ? new Date(fecha + 'T00:00:00').toLocaleDateString('es-AR') : '';
 
   return (
     <div>
@@ -113,10 +111,7 @@ export default function PlacasPage() {
             <input className="troya-input" style={{ flex: '1 1 100%' }} placeholder="Título principal" value={titulo} onChange={(e) => setTitulo(e.target.value)} />
           </div>
 
-          {/* BENEFICIOS editable */}
           <ListaEditable titulo="Beneficios" items={beneficios} lista="beneficios" onCambiar={actualizarBullet} onAgregar={agregarBullet} onQuitar={quitarBullet} />
-
-          {/* REQUISITOS editable */}
           <ListaEditable titulo="Requisitos" items={requisitos} lista="requisitos" onCambiar={actualizarBullet} onAgregar={agregarBullet} onQuitar={quitarBullet} />
         </div>
       </div>
@@ -127,65 +122,73 @@ export default function PlacasPage() {
 
       {/* PREVIEW / PLACA A EXPORTAR */}
       <div style={{ overflowX: 'auto' }}>
-        <div
-          ref={placaRef}
-          style={{
-            width: 900,
-            height: 1125,
-            position: 'relative',
-            backgroundImage: 'url(/placas/fondo-placa.jpg)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            fontFamily: 'var(--font-body)',
-            overflow: 'hidden',
-          }}
-        >
-          {/* velo oscuro para legibilidad */}
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0.15) 55%, rgba(0,0,0,0.65) 100%)' }} />
+        <div ref={placaRef} style={{ width: 900, height: 1125, position: 'relative', fontFamily: 'var(--font-body)', overflow: 'hidden', background: '#1C1512' }}>
+          {/* Foto de fondo como <img> real (necesario para que html-to-image la incluya en la descarga) */}
+          <img
+            src="/placas/fondo-placa.jpg"
+            alt=""
+            crossOrigin="anonymous"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%' }}
+          />
+
+          {/* velo oscuro pareja sobre toda la foto */}
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,7,6,0.45)' }} />
 
           {/* llama decorativa esquina inferior derecha */}
           <img
             src="/logo/isotipo_llama_naranja.png"
             alt=""
-            style={{ position: 'absolute', bottom: -30, right: -40, width: 260, opacity: 0.85, transform: 'rotate(8deg)' }}
+            crossOrigin="anonymous"
+            style={{ position: 'absolute', bottom: -20, right: -30, width: 190, opacity: 0.9 }}
           />
 
-          <div style={{ position: 'relative', padding: '44px 50px 0' }}>
-            {/* Nombre en franja negra */}
-            <div style={{ display: 'inline-block', background: 'rgba(28,21,18,0.88)', padding: '10px 26px', borderRadius: 8 }}>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, color: '#fff', letterSpacing: 0.5 }}>
-                {nombreCliente || 'NOMBRE DEL CLIENTE'}
-              </span>
+          {/* PANEL DE CONTENIDO (ordena y da legibilidad) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 60,
+              left: 40,
+              right: 40,
+              background: 'rgba(12,9,7,0.72)',
+              borderRadius: 22,
+              padding: '34px 36px',
+            }}
+          >
+            {/* Nombre + tagline */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+              <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', padding: '9px 20px', borderRadius: 8 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: '#fff' }}>
+                  {nombreCliente || 'NOMBRE DEL CLIENTE'}
+                </span>
+              </div>
+              <div style={{ background: '#DA231F', padding: '9px 20px', borderRadius: 8 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                  {tagline}
+                </span>
+              </div>
             </div>
 
-            {/* Tagline en franja roja */}
-            <div style={{ background: '#DA231F', padding: '14px 26px', margin: '18px 0', display: 'inline-block' }}>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: 0.3 }}>
-                {tagline}
-              </span>
-            </div>
-
-            {/* Título principal */}
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 40, fontWeight: 700, color: '#fff', margin: '4px 0 40px', lineHeight: 1.1, textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+            {/* Título */}
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 700, color: '#fff', margin: '0 0 30px', lineHeight: 1.15 }}>
               {titulo}
             </h1>
 
             {/* Dos columnas */}
-            <div style={{ display: 'flex', gap: 30 }}>
+            <div style={{ display: 'flex', gap: 28 }}>
               <ColumnaPlaca icono={<IconBeneficios />} titulo="BENEFICIOS" items={beneficios} />
-              <div style={{ width: 1, background: 'rgba(255,255,255,0.35)', margin: '6px 0' }} />
+              <div style={{ width: 1, background: 'rgba(255,255,255,0.2)' }} />
               <ColumnaPlaca icono={<IconRequisitos />} titulo="REQUISITOS" items={requisitos} />
             </div>
           </div>
 
           {/* Fecha */}
-          <div style={{ position: 'absolute', left: 30, bottom: 100, background: '#DA231F', padding: '8px 18px', borderRadius: 4 }}>
-            <span style={{ color: '#fff', fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fechaFormateada}</span>
+          <div style={{ position: 'absolute', left: 40, bottom: 78, background: '#DA231F', padding: '7px 16px', borderRadius: 5 }}>
+            <span style={{ color: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fechaFormateada}</span>
           </div>
 
           {/* Logo TROYA */}
-          <div style={{ position: 'absolute', bottom: 32, left: 0, right: 0, textAlign: 'center' }}>
-            <img src="/logo/logo_troya_blanco_transparente.png" alt="Troya" style={{ height: 34 }} />
+          <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, textAlign: 'center' }}>
+            <img src="/logo/logo_troya_blanco_transparente.png" alt="Troya" crossOrigin="anonymous" style={{ height: 30 }} />
           </div>
         </div>
       </div>
@@ -196,16 +199,16 @@ export default function PlacasPage() {
 function ColumnaPlaca({ icono, titulo, items }: { icono: React.ReactNode; titulo: string; items: Bullet[] }) {
   return (
     <div style={{ flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-        <div style={{ color: '#EB6726', width: 32, height: 32, flexShrink: 0 }}>{icono}</div>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#fff' }}>{titulo}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16 }}>
+        <div style={{ color: '#EB6726', width: 26, height: 26, flexShrink: 0 }}>{icono}</div>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: '#fff' }}>{titulo}</span>
       </div>
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 11 }}>
         {items.filter((b) => b.negrita || b.texto).map((b) => (
-          <li key={b.id} style={{ display: 'flex', gap: 8, fontSize: 15, color: '#fff', lineHeight: 1.35 }}>
-            <span style={{ marginTop: 2 }}>•</span>
+          <li key={b.id} style={{ display: 'flex', gap: 7, fontSize: 13.5, color: '#F0EAE4', lineHeight: 1.4 }}>
+            <span style={{ marginTop: 1 }}>•</span>
             <span>
-              {b.negrita && <strong>{b.negrita} </strong>}
+              {b.negrita && <strong style={{ color: '#fff' }}>{b.negrita} </strong>}
               {b.texto}
             </span>
           </li>
@@ -231,20 +234,8 @@ function ListaEditable({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.map((b) => (
           <div key={b.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              className="troya-input"
-              style={{ flex: '0 0 170px' }}
-              placeholder="Negrita (ej: Descuento:)"
-              value={b.negrita}
-              onChange={(e) => onCambiar(lista, b.id, 'negrita', e.target.value)}
-            />
-            <input
-              className="troya-input"
-              style={{ flex: 1 }}
-              placeholder="Resto del texto"
-              value={b.texto}
-              onChange={(e) => onCambiar(lista, b.id, 'texto', e.target.value)}
-            />
+            <input className="troya-input" style={{ flex: '0 0 170px' }} placeholder="Negrita (ej: Descuento:)" value={b.negrita} onChange={(e) => onCambiar(lista, b.id, 'negrita', e.target.value)} />
+            <input className="troya-input" style={{ flex: 1 }} placeholder="Resto del texto" value={b.texto} onChange={(e) => onCambiar(lista, b.id, 'texto', e.target.value)} />
             <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => onQuitar(lista, b.id)} title="Quitar">
               <IconTacho />
             </button>
