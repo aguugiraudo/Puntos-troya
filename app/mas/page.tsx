@@ -7,6 +7,7 @@ const MODULOS = [
   { href: '/mapa', nombre: 'Mapa de Puntos Troya', descripcion: 'Vista geográfica de los confirmados', icon: IconMapa, modulo: 'mapa' },
   { href: '/mas/puntos-canje', nombre: 'Puntos y Canje', descripcion: 'Saldo, catálogo y canjes por cliente', icon: IconPuntos, modulo: 'puntos_canje' },
   { href: '/mas/minimos-distribuidor', nombre: 'Mínimos por Distribuidor', descripcion: 'Cantidad para acceder al 44% de descuento', icon: IconMinimos, modulo: 'minimos_distribuidor' },
+  { href: '/mas/placas', nombre: 'Generador de Placas', descripcion: 'Armá y descargá la propuesta como imagen', icon: IconPlaca, modulo: 'placas' },
   { href: '/mas/accesos', nombre: 'Panel de Control de Accesos', descripcion: 'Usuarios y permisos por módulo', icon: IconAccesos, modulo: 'accesos' },
 ];
 
@@ -71,6 +72,16 @@ function IconMinimos() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3v18h18" />
       <path d="M7 15l4-5 3 3 5-7" />
+    </svg>
+  );
+}
+
+function IconPlaca() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 7h8M8 11h8M8 15h5" />
+      <circle cx="17" cy="17" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
