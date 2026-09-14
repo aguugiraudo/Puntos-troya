@@ -200,14 +200,14 @@ export default function CostosPreciosPage() {
       const hoja = workbook.Sheets[workbook.SheetNames[0]];
       const filas: any[] = XLSX.utils.sheet_to_json(hoja);
 
-      function buscarColumna(fila: any, posibles: string[]) {
+      const buscarColumna = (fila: any, posibles: string[]) => {
         const claves = Object.keys(fila);
         for (const posible of posibles) {
           const encontrada = claves.find((k) => k.toLowerCase().trim() === posible);
           if (encontrada) return fila[encontrada];
         }
         return undefined;
-      }
+      };
 
       let creados = 0;
       let actualizados = 0;
