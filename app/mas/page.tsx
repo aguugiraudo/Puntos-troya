@@ -1,21 +1,18 @@
+'use client';
+
 import Link from 'next/link';
+import { useAuth } from '@/lib/AuthContext';
 
 const MODULOS = [
-  {
-    href: '/mapa',
-    nombre: 'Mapa de Puntos Troya',
-    descripcion: 'Vista geográfica de los confirmados',
-    icon: IconMapa,
-  },
-  {
-    href: '/mas/puntos-canje',
-    nombre: 'Puntos y Canje',
-    descripcion: 'Saldo, catálogo y canjes por cliente',
-    icon: IconPuntos,
-  },
+  { href: '/mapa', nombre: 'Mapa de Puntos Troya', descripcion: 'Vista geográfica de los confirmados', icon: IconMapa, modulo: 'mapa' },
+  { href: '/mas/puntos-canje', nombre: 'Puntos y Canje', descripcion: 'Saldo, catálogo y canjes por cliente', icon: IconPuntos, modulo: 'puntos_canje' },
+  { href: '/mas/accesos', nombre: 'Panel de Control de Accesos', descripcion: 'Usuarios y permisos por módulo', icon: IconAccesos, modulo: 'accesos' },
 ];
 
 export default function MasPage() {
+  const { puedeVer } = useAuth();
+  const modulosVisibles = MODULOS.filter((m) => puedeVer(m.modulo));
+
   return (
     <div>
       <div className="troya-header">
@@ -25,22 +22,27 @@ export default function MasPage() {
         </div>
       </div>
 
-      <div className="troya-hub-grid">
-        {MODULOS.map((m) => {
-          const Icon = m.icon;
-          return (
-            <Link key={m.href} href={m.href} className="troya-hub-card">
-              <div className="troya-hub-card-icono">
-                <Icon />
-              </div>
-              <div className="troya-hub-card-texto">
-                <h3>{m.nombre}</h3>
-                <p>{m.descripcion}</p>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      {modulosVisibles.length === 0 ? (
+        <div className="troya-vacio">
+          <h3>No tenés acceso a más módulos</h3>
+          <p>Pedile al administrador que te habilite alguno desde el Panel de Accesos.</p>
+        </div>
+      ) : (
+        <div className="troya-hub-grid">
+          {modulosVisibles.map((m) => {
+            const Icon = m.icon;
+            return (
+              <Link key={m.href} href={m.href} className="troya-hub-card">
+                <div className="troya-hub-card-icono"><Icon /></div>
+                <div className="troya-hub-card-texto">
+                  <h3>{m.nombre}</h3>
+                  <p>{m.descripcion}</p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -59,6 +61,15 @@ function IconPuntos() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2c1 3-1.5 3.5-1.5 6 0 1.4 1.1 2.5 2.5 2.5s2.5-1.1 2.5-2.5" />
       <path d="M12 2c3 3.5-2 5-2 9a5 5 0 1010 0c0-2.5-1.5-3.5-2.5-5" />
+    </svg>
+  );
+}
+
+function IconAccesos() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <path d="M7 11V7a5 5 0 0110 0v4" />
     </svg>
   );
 }

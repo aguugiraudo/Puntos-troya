@@ -1,6 +1,7 @@
 import './globals.css';
 import { Space_Grotesk, Inter } from 'next/font/google';
-import TroyaNav from '@/components/TroyaNav';
+import { AuthProvider } from '@/lib/AuthContext';
+import AppShell from '@/components/AppShell';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -31,8 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${spaceGrotesk.variable} ${inter.variable}`}>
       <body>
-        <TroyaNav />
-        <main className="troya-main">{children}</main>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

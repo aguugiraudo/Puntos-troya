@@ -3,17 +3,21 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/lib/AuthContext';
 
 const ITEMS = [
-  { href: '/', label: 'Inicio', icon: IconInicio },
-  { href: '/clientes', label: 'Clientes', icon: IconClientes },
-  { href: '/activos', label: 'Activos', icon: IconActivos },
-  { href: '/prospectos', label: 'Prospectos', icon: IconProspectos },
-  { href: '/mas', label: 'Más', icon: IconMas },
+  { href: '/', label: 'Inicio', icon: IconInicio, modulo: null as string | null },
+  { href: '/clientes', label: 'Clientes', icon: IconClientes, modulo: 'clientes' },
+  { href: '/activos', label: 'Activos', icon: IconActivos, modulo: 'activos' },
+  { href: '/prospectos', label: 'Prospectos', icon: IconProspectos, modulo: 'prospectos' },
+  { href: '/mas', label: 'Más', icon: IconMas, modulo: null },
 ];
 
 export default function TroyaNav() {
   const pathname = usePathname();
+  const { puedeVer, usuario, cerrarSesion } = useAuth();
+
+  const itemsVisibles = ITEMS.filter((item) => !item.modulo || puedeVer(item.modulo));
 
   function esActivo(href: string) {
     if (href === '/') return pathname === '/';
@@ -31,17 +35,20 @@ export default function TroyaNav() {
           className="troya-topbar-logo"
           style={{ width: 'auto', height: '24px' }}
         />
-        <nav className="troya-topbar-links">
-          {ITEMS.map((item) => (
+        <nav className="troya-topbar-links" style={{ alignItems: 'center' }}>
+          {itemsVisibles.map((item) => (
             <Link key={item.href} href={item.href} className={esActivo(item.href) ? 'activo' : ''}>
               {item.label}
             </Link>
           ))}
+          <button onClick={cerrarSesion} style={{ background: 'none', border: 'none', color: '#EFE8E1', fontSize: 13, cursor: 'pointer', opacity: 0.75 }}>
+            {usuario?.nombre} · Salir
+          </button>
         </nav>
       </header>
 
       <nav className="troya-bottomnav">
-        {ITEMS.map((item) => {
+        {itemsVisibles.map((item) => {
           const Icon = item.icon;
           return (
             <Link key={item.href} href={item.href} className={esActivo(item.href) ? 'activo' : ''}>
