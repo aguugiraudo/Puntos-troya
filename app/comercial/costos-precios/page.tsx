@@ -4,9 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 
+const ORDEN_CATEGORIAS = ['Fogonero', 'Accesorios Fogoneros', 'Horno', 'Estufas'];
+
 type Producto = {
   id: string;
   nombre: string;
+  codigo: string | null;
+  categoria: string | null;
   costo_materia_prima: number | null;
   horas_produccion: number | null;
   valor_hora_hombre: number | null;
@@ -26,6 +30,12 @@ type HistorialItem = {
   precio_lista: number | null;
 };
 
+function ordenCategoria(categoria: string | null): number {
+  if (!categoria) return 999;
+  const idx = ORDEN_CATEGORIAS.indexOf(categoria);
+  return idx === -1 ? 998 : idx;
+}
+
 export default function CostosPreciosPage() {
   const { usuario } = useAuth();
 
@@ -38,6 +48,8 @@ export default function CostosPreciosPage() {
 
   const [panelNuevoAbierto, setPanelNuevoAbierto] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState('');
+  const [codigoNuevo, setCodigoNuevo] = useState('');
+  const [categoriaNueva, setCategoriaNueva] = useState('');
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [borrador, setBorrador] = useState<Partial<Producto>>({});
@@ -86,7 +98,25 @@ export default function CostosPreciosPage() {
 
   const productosFiltrados = productos.filter((p) => {
     const texto = busqueda.trim().toLowerCase();
-    return !texto || p.nombre.toLowerCase().includes(texto);
+    if (!texto) return true;
+    return p.nombre.toLowerCase().includes(texto) || (p.codigo ?? '').toLowerCase().includes(texto);
+  });
+
+  const productosOrdenados = [...productosFiltrados].sort((a, b) => {
+    const oc = ordenCategoria(a.categoria) - ordenCategoria(b.categoria);
+    if (oc !== 0) return oc;
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  const grupos: { categoria: string; items: Producto[] }[] = [];
+  productosOrdenados.forEach((p) => {
+    const nombreCat = p.categoria && ORDEN_CATEGORIAS.includes(p.categoria) ? p.categoria : (p.categoria || 'Sin categoría');
+    let grupo = grupos.find((g) => g.categoria === nombreCat);
+    if (!grupo) {
+      grupo = { categoria: nombreCat, items: [] };
+      grupos.push(grupo);
+    }
+    grupo.items.push(p);
   });
 
   function calcular(costoMP: number | null, horas: number | null, valorHora: number | null, precioLista: number | null) {
@@ -113,9 +143,15 @@ export default function CostosPreciosPage() {
   async function crearProducto(e: React.FormEvent) {
     e.preventDefault();
     if (!nombreNuevo.trim()) return;
-    const { error } = await supabase.from('productos').insert({ nombre: nombreNuevo });
+    const { error } = await supabase.from('productos').insert({
+      nombre: nombreNuevo,
+      codigo: codigoNuevo || null,
+      categoria: categoriaNueva || null,
+    });
     if (error) { alert('Error al crear: ' + error.message); return; }
     setNombreNuevo('');
+    setCodigoNuevo('');
+    setCategoriaNueva('');
     setPanelNuevoAbierto(false);
     cargarTodo();
   }
@@ -136,6 +172,8 @@ export default function CostosPreciosPage() {
       .from('productos')
       .update({
         nombre: borrador.nombre,
+        codigo: borrador.codigo ?? null,
+        categoria: borrador.categoria ?? null,
         costo_materia_prima: costoMP,
         horas_produccion: horas,
         valor_hora_hombre: valorHora,
@@ -216,9 +254,11 @@ export default function CostosPreciosPage() {
         const nombre = buscarColumna(fila, ['producto', 'nombre']);
         if (!nombre) continue;
 
+        const codigo = buscarColumna(fila, ['codigo', 'código', 'cod']);
+        const categoria = buscarColumna(fila, ['categoria', 'categoría']);
         const costoMP = Number(buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp']) ?? 0) || null;
-        const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas']) ?? 0) || null;
-        const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora']);
+        const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción']) ?? 0) || null;
+        const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora', 'costo hora']);
         const valorHora = valorHoraFila ? Number(valorHoraFila) : null;
         const precioLista = Number(buscarColumna(fila, ['precio lista', 'precio']) ?? 0) || null;
 
@@ -230,6 +270,8 @@ export default function CostosPreciosPage() {
 
         if (existente) {
           await supabase.from('productos').update({
+            codigo: codigo ? String(codigo) : existente.codigo,
+            categoria: categoria ? String(categoria) : existente.categoria,
             costo_materia_prima: costoMP,
             horas_produccion: horas,
             valor_hora_hombre: valorHora,
@@ -243,6 +285,8 @@ export default function CostosPreciosPage() {
         } else {
           const { data: nuevo } = await supabase.from('productos').insert({
             nombre: String(nombre),
+            codigo: codigo ? String(codigo) : null,
+            categoria: categoria ? String(categoria) : null,
             costo_materia_prima: costoMP,
             horas_produccion: horas,
             valor_hora_hombre: valorHora,
@@ -276,6 +320,93 @@ export default function CostosPreciosPage() {
       setImportando(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  }
+
+  function filaProducto(p: Producto) {
+    if (editandoId === p.id) {
+      return (
+        <div key={p.id} className="troya-card troya-card-editando">
+          <div className="troya-form">
+            <input className="troya-input" value={borrador.nombre ?? ''} onChange={(e) => setBorrador({ ...borrador, nombre: e.target.value })} placeholder="Nombre" />
+            <input className="troya-input" value={borrador.codigo ?? ''} onChange={(e) => setBorrador({ ...borrador, codigo: e.target.value })} placeholder="Código" />
+            <select className="troya-input" value={borrador.categoria ?? ''} onChange={(e) => setBorrador({ ...borrador, categoria: e.target.value })}>
+              <option value="">Sin categoría</option>
+              {ORDEN_CATEGORIAS.map((c) => (<option key={c} value={c}>{c}</option>))}
+            </select>
+          </div>
+          <div className="troya-form">
+            <input className="troya-input" type="number" value={borrador.costo_materia_prima ?? ''} onChange={(e) => setBorrador({ ...borrador, costo_materia_prima: e.target.value ? Number(e.target.value) : null })} placeholder="Costo materia prima" />
+            <input className="troya-input" type="number" value={borrador.horas_produccion ?? ''} onChange={(e) => setBorrador({ ...borrador, horas_produccion: e.target.value ? Number(e.target.value) : null })} placeholder="Tiempo de producción (hs)" />
+            <input className="troya-input" type="number" value={borrador.valor_hora_hombre ?? ''} onChange={(e) => setBorrador({ ...borrador, valor_hora_hombre: e.target.value ? Number(e.target.value) : null })} placeholder={`Costo hora (vacío = general: ${valorHoraGlobal})`} />
+            <input className="troya-input" type="number" value={borrador.precio_lista ?? ''} onChange={(e) => setBorrador({ ...borrador, precio_lista: e.target.value ? Number(e.target.value) : null })} placeholder="Precio de lista" />
+          </div>
+          <div className="troya-card-acciones">
+            <button className="troya-btn" onClick={() => guardarEdicion(p.id)}>Guardar cambios</button>
+            <button className="troya-btn troya-btn-secundario" onClick={() => { setEditandoId(null); setBorrador({}); }}>Cancelar</button>
+          </div>
+        </div>
+      );
+    }
+
+    const costoBase = baseRentabilidad === 'completo' ? (p.costo_completo ?? 0) : (p.costo_materia_prima ?? 0);
+
+    return (
+      <div key={p.id} className="troya-card troya-card-editando">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', flexWrap: 'wrap', gap: 10 }}>
+          <div className="troya-card-info">
+            <h3>{p.codigo ? `${p.codigo} — ` : ''}{p.nombre}</h3>
+            <p>
+              MP: ${(p.costo_materia_prima ?? 0).toLocaleString('es-AR')} · {p.horas_produccion ?? 0} hs · Costo hora: ${(p.valor_hora_hombre ?? valorHoraGlobal).toLocaleString('es-AR')} · M.O.: ${(p.costo_mano_obra ?? 0).toLocaleString('es-AR')} · Completo: ${(p.costo_completo ?? 0).toLocaleString('es-AR')} · Precio lista: ${(p.precio_lista ?? 0).toLocaleString('es-AR')}
+            </p>
+          </div>
+          <div className="troya-card-acciones">
+            <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial">
+              <IconHistorial />
+            </button>
+            <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
+              <IconLapiz />
+            </button>
+            <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar">
+              <IconTacho />
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
+          {listas.map((l) => {
+            const precioVenta = (p.precio_lista ?? 0) * (1 - l.descuento_porcentaje / 100);
+            const rentabilidad = precioVenta > 0 ? ((precioVenta - costoBase) / precioVenta) * 100 : 0;
+            const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? 'var(--amber)' : 'var(--orange)';
+            return (
+              <div key={l.id} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 14px', minWidth: 120 }}>
+                <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>{l.nombre} (-{l.descuento_porcentaje}%)</p>
+                <p style={{ fontSize: 13, margin: '2px 0 0', fontWeight: 600 }}>${precioVenta.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+                <p style={{ fontSize: 15, fontWeight: 700, color, margin: 0, fontFamily: 'var(--font-display)' }}>{rentabilidad.toFixed(1)}%</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {historialAbiertoId === p.id && (
+          <div style={{ marginTop: 10, width: '100%' }}>
+            {!historialPorProducto[p.id] || historialPorProducto[p.id].length === 0 ? (
+              <p className="troya-subtitulo">Sin actualizaciones registradas todavía.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {historialPorProducto[p.id].map((h) => (
+                  <div key={h.id} style={{ display: 'flex', gap: 14, fontSize: 12.5, color: 'var(--muted)', borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
+                    <span style={{ fontWeight: 700, color: 'var(--ink)', minWidth: 80 }}>{new Date(h.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</span>
+                    <span>MP: ${(h.costo_materia_prima ?? 0).toLocaleString('es-AR')}</span>
+                    <span>Completo: ${(h.costo_completo ?? 0).toLocaleString('es-AR')}</span>
+                    <span>Precio: ${(h.precio_lista ?? 0).toLocaleString('es-AR')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -333,7 +464,7 @@ export default function CostosPreciosPage() {
         {panelImportarAbierto && (
           <div className="troya-panel-body">
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Columnas esperadas: Producto, Costo Materia Prima, Horas Producción, Valor Hora Hombre (opcional), Precio Lista.
+              Columnas esperadas: Producto, Código, Categoría, Costo Materia Prima, Tiempo de Producción (hs), Costo Hora (opcional), Precio Lista.
               Si el producto ya existe (por nombre), se actualiza; si no, se crea.
             </p>
             <div className="troya-form">
@@ -351,7 +482,7 @@ export default function CostosPreciosPage() {
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
         <div className="troya-buscador" style={{ marginBottom: 0, flex: 1 }}>
           <IconBuscar />
-          <input type="text" placeholder="Buscar producto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+          <input type="text" placeholder="Buscar por nombre o código..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="troya-btn" style={baseRentabilidad === 'completo' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }} onClick={() => setBaseRentabilidad('completo')}>
@@ -371,7 +502,12 @@ export default function CostosPreciosPage() {
         {panelNuevoAbierto && (
           <div className="troya-panel-body">
             <form onSubmit={crearProducto} className="troya-form">
-              <input className="troya-input" placeholder="Nombre del producto" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} required />
+              <input className="troya-input" placeholder="Nombre" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} required />
+              <input className="troya-input" placeholder="Código" value={codigoNuevo} onChange={(e) => setCodigoNuevo(e.target.value)} />
+              <select className="troya-input" value={categoriaNueva} onChange={(e) => setCategoriaNueva(e.target.value)}>
+                <option value="">Sin categoría</option>
+                {ORDEN_CATEGORIAS.map((c) => (<option key={c} value={c}>{c}</option>))}
+              </select>
               <button type="submit" className="troya-btn">Crear</button>
             </form>
           </div>
@@ -380,93 +516,20 @@ export default function CostosPreciosPage() {
 
       {cargando ? (
         <p className="troya-subtitulo" style={{ marginTop: 16 }}>Cargando...</p>
-      ) : productosFiltrados.length === 0 ? (
+      ) : productosOrdenados.length === 0 ? (
         <div className="troya-vacio" style={{ marginTop: 16 }}>
           <h3>No hay productos</h3>
           <p>Cargá uno manual o importá un Excel.</p>
         </div>
       ) : (
-        <div className="troya-lista" style={{ marginTop: 16 }}>
-          {productosFiltrados.map((p) => {
-            if (editandoId === p.id) {
-              return (
-                <div key={p.id} className="troya-card troya-card-editando">
-                  <div className="troya-form">
-                    <input className="troya-input" value={borrador.nombre ?? ''} onChange={(e) => setBorrador({ ...borrador, nombre: e.target.value })} placeholder="Nombre" />
-                    <input className="troya-input" type="number" value={borrador.costo_materia_prima ?? ''} onChange={(e) => setBorrador({ ...borrador, costo_materia_prima: e.target.value ? Number(e.target.value) : null })} placeholder="Costo materia prima" />
-                    <input className="troya-input" type="number" value={borrador.horas_produccion ?? ''} onChange={(e) => setBorrador({ ...borrador, horas_produccion: e.target.value ? Number(e.target.value) : null })} placeholder="Horas de producción" />
-                    <input className="troya-input" type="number" value={borrador.valor_hora_hombre ?? ''} onChange={(e) => setBorrador({ ...borrador, valor_hora_hombre: e.target.value ? Number(e.target.value) : null })} placeholder={`Valor hora (vacío = general: ${valorHoraGlobal})`} />
-                    <input className="troya-input" type="number" value={borrador.precio_lista ?? ''} onChange={(e) => setBorrador({ ...borrador, precio_lista: e.target.value ? Number(e.target.value) : null })} placeholder="Precio de lista" />
-                  </div>
-                  <div className="troya-card-acciones">
-                    <button className="troya-btn" onClick={() => guardarEdicion(p.id)}>Guardar cambios</button>
-                    <button className="troya-btn troya-btn-secundario" onClick={() => { setEditandoId(null); setBorrador({}); }}>Cancelar</button>
-                  </div>
-                </div>
-              );
-            }
-
-            const costoBase = baseRentabilidad === 'completo' ? (p.costo_completo ?? 0) : (p.costo_materia_prima ?? 0);
-
-            return (
-              <div key={p.id} className="troya-card troya-card-editando">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', flexWrap: 'wrap', gap: 10 }}>
-                  <div className="troya-card-info">
-                    <h3>{p.nombre}</h3>
-                    <p>
-                      MP: ${(p.costo_materia_prima ?? 0).toLocaleString('es-AR')} · M.O.: ${(p.costo_mano_obra ?? 0).toLocaleString('es-AR')} · Completo: ${(p.costo_completo ?? 0).toLocaleString('es-AR')} · Precio lista: ${(p.precio_lista ?? 0).toLocaleString('es-AR')}
-                    </p>
-                  </div>
-                  <div className="troya-card-acciones">
-                    <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial">
-                      <IconHistorial />
-                    </button>
-                    <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
-                      <IconLapiz />
-                    </button>
-                    <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar">
-                      <IconTacho />
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
-                  {listas.map((l) => {
-                    const precioVenta = (p.precio_lista ?? 0) * (1 - l.descuento_porcentaje / 100);
-                    const rentabilidad = precioVenta > 0 ? ((precioVenta - costoBase) / precioVenta) * 100 : 0;
-                    const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? 'var(--amber)' : 'var(--orange)';
-                    return (
-                      <div key={l.id} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 14px', minWidth: 120 }}>
-                        <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>{l.nombre} (-{l.descuento_porcentaje}%)</p>
-                        <p style={{ fontSize: 13, margin: '2px 0 0', fontWeight: 600 }}>${precioVenta.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
-                        <p style={{ fontSize: 15, fontWeight: 700, color, margin: 0, fontFamily: 'var(--font-display)' }}>{rentabilidad.toFixed(1)}%</p>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {historialAbiertoId === p.id && (
-                  <div style={{ marginTop: 10, width: '100%' }}>
-                    {!historialPorProducto[p.id] || historialPorProducto[p.id].length === 0 ? (
-                      <p className="troya-subtitulo">Sin actualizaciones registradas todavía.</p>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {historialPorProducto[p.id].map((h) => (
-                          <div key={h.id} style={{ display: 'flex', gap: 14, fontSize: 12.5, color: 'var(--muted)', borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
-                            <span style={{ fontWeight: 700, color: 'var(--ink)', minWidth: 80 }}>{new Date(h.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</span>
-                            <span>MP: ${(h.costo_materia_prima ?? 0).toLocaleString('es-AR')}</span>
-                            <span>Completo: ${(h.costo_completo ?? 0).toLocaleString('es-AR')}</span>
-                            <span>Precio: ${(h.precio_lista ?? 0).toLocaleString('es-AR')}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        grupos.map((grupo) => (
+          <div key={grupo.categoria} className="troya-seccion">
+            <div className="troya-seccion-titulo">{grupo.categoria}</div>
+            <div className="troya-lista">
+              {grupo.items.map((p) => filaProducto(p))}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );
