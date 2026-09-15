@@ -231,6 +231,10 @@ export default function CostosPreciosPage() {
     if (!file) return;
 
     setImportando(true);
+    const errores: string[] = [];
+    let creados = 0;
+    let actualizados = 0;
+
     try {
       const XLSX = await import('xlsx');
       const buffer = await file.arrayBuffer();
@@ -247,75 +251,90 @@ export default function CostosPreciosPage() {
         return undefined;
       };
 
-      let creados = 0;
-      let actualizados = 0;
+      for (let i = 0; i < filas.length; i++) {
+        const fila = filas[i];
+        const nombreCrudo = buscarColumna(fila, ['producto', 'nombre', 'descripcion', 'descripción']);
+        if (!nombreCrudo) continue;
 
-      for (const fila of filas) {
-        const nombre = buscarColumna(fila, ['producto', 'nombre', 'descripcion', 'descripción']);
-        if (!nombre) continue;
+        const nombre = String(nombreCrudo).trim();
 
-        const codigo = buscarColumna(fila, ['codigo', 'código', 'cod']);
-        const categoria = buscarColumna(fila, ['categoria', 'categoría', 'rubro']);
-        const costoMP = Number(buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp', 'reposicion_pesos', 'reposicion', 'reposición']) ?? 0) || null;
-        const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción']) ?? 0) || null;
-        const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora', 'costo hora']);
-        const valorHora = valorHoraFila ? Number(valorHoraFila) : null;
-        const precioLista = Number(buscarColumna(fila, ['precio lista', 'precio', 'precio_l1', 'precio l1']) ?? 0) || null;
+        try {
+          const codigo = buscarColumna(fila, ['codigo', 'código', 'cod']);
+          const categoria = buscarColumna(fila, ['categoria', 'categoría', 'rubro']);
+          const costoMP = Number(buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp', 'reposicion_pesos', 'reposicion', 'reposición']) ?? 0) || null;
+          const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción']) ?? 0) || null;
+          const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora', 'costo hora']);
+          const valorHora = valorHoraFila ? Number(valorHoraFila) : null;
+          const precioLista = Number(buscarColumna(fila, ['precio lista', 'precio', 'precio_l1', 'precio l1']) ?? 0) || null;
 
-        const { manoObra, completo } = calcular(costoMP, horas, valorHora, precioLista);
+          const { manoObra, completo } = calcular(costoMP, horas, valorHora, precioLista);
 
-        const existente = productos.find((p) => p.nombre.toLowerCase().trim() === String(nombre).toLowerCase().trim());
+          const existente = productos.find((p) => p.nombre.toLowerCase().trim() === nombre.toLowerCase());
 
-        let productoId: string;
+          let productoId: string;
 
-        if (existente) {
-          await supabase.from('productos').update({
-            codigo: codigo ? String(codigo) : existente.codigo,
-            categoria: categoria ? String(categoria) : existente.categoria,
+          if (existente) {
+            const { error: errorUpdate } = await supabase.from('productos').update({
+              codigo: codigo ? String(codigo) : existente.codigo,
+              categoria: categoria ? String(categoria) : existente.categoria,
+              costo_materia_prima: costoMP,
+              horas_produccion: horas,
+              valor_hora_hombre: valorHora,
+              costo_mano_obra: manoObra,
+              costo_completo: completo,
+              precio_lista: precioLista,
+              actualizado_en: new Date().toISOString(),
+            }).eq('id', existente.id);
+
+            if (errorUpdate) throw new Error(errorUpdate.message);
+            productoId = existente.id;
+            actualizados++;
+          } else {
+            const { data: nuevo, error: errorInsert } = await supabase.from('productos').insert({
+              nombre,
+              codigo: codigo ? String(codigo) : null,
+              categoria: categoria ? String(categoria) : null,
+              costo_materia_prima: costoMP,
+              horas_produccion: horas,
+              valor_hora_hombre: valorHora,
+              costo_mano_obra: manoObra,
+              costo_completo: completo,
+              precio_lista: precioLista,
+              actualizado_en: new Date().toISOString(),
+            }).select('id').single();
+
+            if (errorInsert || !nuevo) throw new Error(errorInsert?.message ?? 'No se pudo crear el producto (sin detalle de error)');
+            productoId = nuevo.id;
+            creados++;
+          }
+
+          const { error: errorHistorial } = await supabase.from('historial_costos').insert({
+            producto_id: productoId,
+            fecha: fechaImportacion,
             costo_materia_prima: costoMP,
             horas_produccion: horas,
-            valor_hora_hombre: valorHora,
+            valor_hora_hombre: valorHora ?? valorHoraGlobal,
             costo_mano_obra: manoObra,
             costo_completo: completo,
             precio_lista: precioLista,
-            actualizado_en: new Date().toISOString(),
-          }).eq('id', existente.id);
-          productoId = existente.id;
-          actualizados++;
-        } else {
-          const { data: nuevo } = await supabase.from('productos').insert({
-            nombre: String(nombre),
-            codigo: codigo ? String(codigo) : null,
-            categoria: categoria ? String(categoria) : null,
-            costo_materia_prima: costoMP,
-            horas_produccion: horas,
-            valor_hora_hombre: valorHora,
-            costo_mano_obra: manoObra,
-            costo_completo: completo,
-            precio_lista: precioLista,
-            actualizado_en: new Date().toISOString(),
-          }).select('id').single();
-          productoId = nuevo!.id;
-          creados++;
+          });
+          if (errorHistorial) throw new Error('Historial no guardado: ' + errorHistorial.message);
+        } catch (errFila: any) {
+          errores.push(`Fila ${i + 2} ("${nombre}"): ${errFila.message}`);
         }
-
-        await supabase.from('historial_costos').insert({
-          producto_id: productoId,
-          fecha: fechaImportacion,
-          costo_materia_prima: costoMP,
-          horas_produccion: horas,
-          valor_hora_hombre: valorHora ?? valorHoraGlobal,
-          costo_mano_obra: manoObra,
-          costo_completo: completo,
-          precio_lista: precioLista,
-        });
       }
 
-      alert(`Importación completa: ${actualizados} productos actualizados, ${creados} nuevos.`);
+      let resumen = `Importación terminada: ${actualizados} actualizados, ${creados} nuevos.`;
+      if (errores.length > 0) {
+        resumen += `\n\n${errores.length} fila(s) con error:\n` + errores.slice(0, 10).join('\n');
+        if (errores.length > 10) resumen += `\n...y ${errores.length - 10} más.`;
+      }
+      alert(resumen);
+
       setPanelImportarAbierto(false);
       cargarTodo();
     } catch (err: any) {
-      alert('Error al leer el archivo: ' + err.message);
+      alert('Error general al leer el archivo: ' + err.message);
     } finally {
       setImportando(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
