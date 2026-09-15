@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 
-const ORDEN_CATEGORIAS = ['Fogonero', 'Accesorios Fogoneros', 'Horno', 'Estufas'];
+const ORDEN_CATEGORIAS = ['Fogoneros', 'Accesorios Fogoneros', 'Hornos', 'Estufas'];
 
 type Producto = {
   id: string;
@@ -110,7 +110,7 @@ export default function CostosPreciosPage() {
 
   const grupos: { categoria: string; items: Producto[] }[] = [];
   productosOrdenados.forEach((p) => {
-    const nombreCat = p.categoria && ORDEN_CATEGORIAS.includes(p.categoria) ? p.categoria : (p.categoria || 'Sin categoría');
+    const nombreCat = p.categoria || 'Sin categoría';
     let grupo = grupos.find((g) => g.categoria === nombreCat);
     if (!grupo) {
       grupo = { categoria: nombreCat, items: [] };
@@ -251,16 +251,16 @@ export default function CostosPreciosPage() {
       let actualizados = 0;
 
       for (const fila of filas) {
-        const nombre = buscarColumna(fila, ['producto', 'nombre']);
+        const nombre = buscarColumna(fila, ['producto', 'nombre', 'descripcion', 'descripción']);
         if (!nombre) continue;
 
         const codigo = buscarColumna(fila, ['codigo', 'código', 'cod']);
-        const categoria = buscarColumna(fila, ['categoria', 'categoría']);
-        const costoMP = Number(buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp']) ?? 0) || null;
+        const categoria = buscarColumna(fila, ['categoria', 'categoría', 'rubro']);
+        const costoMP = Number(buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp', 'reposicion_pesos', 'reposicion', 'reposición']) ?? 0) || null;
         const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción']) ?? 0) || null;
         const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora', 'costo hora']);
         const valorHora = valorHoraFila ? Number(valorHoraFila) : null;
-        const precioLista = Number(buscarColumna(fila, ['precio lista', 'precio']) ?? 0) || null;
+        const precioLista = Number(buscarColumna(fila, ['precio lista', 'precio', 'precio_l1', 'precio l1']) ?? 0) || null;
 
         const { manoObra, completo } = calcular(costoMP, horas, valorHora, precioLista);
 
@@ -464,7 +464,7 @@ export default function CostosPreciosPage() {
         {panelImportarAbierto && (
           <div className="troya-panel-body">
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Columnas esperadas: Producto, Código, Categoría, Costo Materia Prima, Tiempo de Producción (hs), Costo Hora (opcional), Precio Lista.
+              Reconoce: CODIGO, DESCRIPCION, Rubro, REPOSICION_PESOS (costo materia prima), PRECIO_L1 (precio de lista).
               Si el producto ya existe (por nombre), se actualiza; si no, se crea.
             </p>
             <div className="troya-form">
