@@ -754,3 +754,8 @@ h1, h2, h3 {
     top: 72px;
   }
 }
+/* ---------- FIX: que el encabezado fijo tape bien los botones de abajo ---------- */
+.troya-matriz-tabla tbody td {
+  position: relative;
+  z-index: 1;
+}
