@@ -50,17 +50,30 @@ function badgeRentabilidad(rentabilidad: number) {
   );
 }
 
+function slugify(texto: string) {
+  return texto
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'lista';
+}
+
 export default function CostosPreciosPage() {
   const { usuario } = useAuth();
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [listas, setListas] = useState<ListaPrecio[]>([]);
   const [valorHoraGlobal, setValorHoraGlobal] = useState(0);
+  const [valorHoraGlobalEdit, setValorHoraGlobalEdit] = useState('0');
+  const [guardandoValorHora, setGuardandoValorHora] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
 
   const [listasVisibles, setListasVisibles] = useState<Set<string>>(new Set());
-  const [panelColumnasAbierto, setPanelColumnasAbierto] = useState(false);
+  const [descuentosEdit, setDescuentosEdit] = useState<Record<string, string>>({});
+  const [nombresEdit, setNombresEdit] = useState<Record<string, string>>({});
+  const [nombreListaNueva, setNombreListaNueva] = useState('');
+  const [descuentoListaNueva, setDescuentoListaNueva] = useState('');
 
   const [panelNuevoAbierto, setPanelNuevoAbierto] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState('');
@@ -72,9 +85,6 @@ export default function CostosPreciosPage() {
 
   const [historialAbiertoId, setHistorialAbiertoId] = useState<string | null>(null);
   const [historialPorProducto, setHistorialPorProducto] = useState<Record<string, HistorialItem[]>>({});
-
-  const [panelListasAbierto, setPanelListasAbierto] = useState(false);
-  const [descuentosEdit, setDescuentosEdit] = useState<Record<string, string>>({});
 
   const [panelImportarAbierto, setPanelImportarAbierto] = useState(false);
   const [fechaImportacion, setFechaImportacion] = useState(() => new Date().toISOString().slice(0, 10));
@@ -90,11 +100,23 @@ export default function CostosPreciosPage() {
     const { data: listasData } = await supabase.from('listas_precio').select('*').order('orden');
     setListas(listasData ?? []);
     const mapaDescuentos: Record<string, string> = {};
-    (listasData ?? []).forEach((l) => { mapaDescuentos[l.id] = String(l.descuento_porcentaje); });
+    const mapaNombres: Record<string, string> = {};
+    (listasData ?? []).forEach((l) => {
+      mapaDescuentos[l.id] = String(l.descuento_porcentaje);
+      mapaNombres[l.id] = l.nombre;
+    });
     setDescuentosEdit(mapaDescuentos);
+    setNombresEdit(mapaNombres);
 
-    const { data: configData } = await supabase.from('configuracion').select('valor').eq('clave', 'valor_hora_hombre_global').single();
-    setValorHoraGlobal(configData ? Number(configData.valor) : 0);
+    const { data: configData } = await supabase
+      .from('configuracion')
+      .select('valor')
+      .eq('clave', 'valor_hora_hombre_global')
+      .maybeSingle();
+
+    const valor = configData ? Number(configData.valor) : 0;
+    setValorHoraGlobal(valor);
+    setValorHoraGlobalEdit(String(valor));
 
     setCargando(false);
   }
@@ -156,15 +178,68 @@ export default function CostosPreciosPage() {
     return { manoObra, completo, precioLista: precioLista ?? 0 };
   }
 
-  async function guardarValorHoraGlobal(valor: string) {
-    const { error } = await supabase.from('configuracion').update({ valor }).eq('clave', 'valor_hora_hombre_global');
-    if (error) { alert('Error al guardar: ' + error.message); return; }
+  async function guardarValorHoraGlobal() {
+    setGuardandoValorHora(true);
+    const { error } = await supabase
+      .from('configuracion')
+      .upsert(
+        { clave: 'valor_hora_hombre_global', valor: valorHoraGlobalEdit || '0', descripcion: 'Valor por hora de mano de obra usado por defecto si el producto no tiene uno propio' },
+        { onConflict: 'clave' }
+      );
+
+    setGuardandoValorHora(false);
+
+    if (error) {
+      alert('Error al guardar: ' + error.message);
+      return;
+    }
     cargarTodo();
   }
 
   async function guardarDescuentoLista(id: string, valor: string) {
-    const { error } = await supabase.from('listas_precio').update({ descuento_porcentaje: Number(valor) }).eq('id', id);
+    const { error } = await supabase.from('listas_precio').update({ descuento_porcentaje: Number(valor) || 0 }).eq('id', id);
     if (error) { alert('Error al guardar: ' + error.message); return; }
+    cargarTodo();
+  }
+
+  async function guardarNombreLista(id: string, valor: string) {
+    if (!valor.trim()) return;
+    const { error } = await supabase.from('listas_precio').update({ nombre: valor.trim() }).eq('id', id);
+    if (error) { alert('Error al guardar: ' + error.message); return; }
+    cargarTodo();
+  }
+
+  async function crearLista(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nombreListaNueva.trim()) return;
+
+    const codigoBase = slugify(nombreListaNueva);
+    const codigoFinal = listas.some((l) => l.codigo === codigoBase) ? `${codigoBase}_${Date.now()}` : codigoBase;
+
+    const { error } = await supabase.from('listas_precio').insert({
+      codigo: codigoFinal,
+      nombre: nombreListaNueva.trim(),
+      descuento_porcentaje: Number(descuentoListaNueva) || 0,
+      orden: listas.length + 1,
+    });
+
+    if (error) { alert('Error al crear la lista: ' + error.message); return; }
+
+    setNombreListaNueva('');
+    setDescuentoListaNueva('');
+    cargarTodo();
+  }
+
+  async function eliminarLista(l: ListaPrecio) {
+    const confirmado = confirm(`¿Eliminar la lista "${l.nombre}"?`);
+    if (!confirmado) return;
+    const { error } = await supabase.from('listas_precio').delete().eq('id', l.id);
+    if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+    setListasVisibles((prev) => {
+      const nuevo = new Set(prev);
+      nuevo.delete(l.id);
+      return nuevo;
+    });
     cargarTodo();
   }
 
@@ -378,64 +453,76 @@ export default function CostosPreciosPage() {
         </div>
       </div>
 
-      <div className="troya-panel" style={{ marginBottom: 14 }}>
+      <div className="troya-panel" style={{ marginBottom: 20 }}>
         <div className="troya-panel-body" style={{ borderTop: 'none', paddingTop: 16 }}>
           <div className="troya-form">
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
               Valor hora-hombre general:
-              <input className="troya-input" style={{ flex: '0 0 140px' }} type="number" defaultValue={valorHoraGlobal} onBlur={(e) => guardarValorHoraGlobal(e.target.value)} />
+              <input
+                className="troya-input"
+                style={{ flex: '0 0 140px' }}
+                type="number"
+                value={valorHoraGlobalEdit}
+                onChange={(e) => setValorHoraGlobalEdit(e.target.value)}
+              />
             </label>
+            <button className="troya-btn" onClick={guardarValorHoraGlobal} disabled={guardandoValorHora}>
+              {guardandoValorHora ? 'Guardando...' : 'Guardar'}
+            </button>
           </div>
+          <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
+            Valor actual guardado: ${valorHoraGlobal.toLocaleString('es-AR')}
+          </p>
         </div>
       </div>
 
-      <div className="troya-panel" style={{ marginBottom: 14 }}>
-        <button className={`troya-panel-toggle ${panelListasAbierto ? 'abierto' : ''}`} onClick={() => setPanelListasAbierto(!panelListasAbierto)}>
-          Descuentos por lista de precio
-          <IconMas />
-        </button>
-        {panelListasAbierto && (
-          <div className="troya-panel-body">
-            <div className="troya-form">
-              {listas.map((l) => (
-                <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
-                  {l.nombre}:
+      {/* LISTAS DE PRECIO */}
+      <div className="troya-seccion">
+        <div className="troya-seccion-titulo">Listas de precio</div>
+        <p className="troya-subtitulo" style={{ marginTop: -8, marginBottom: 12 }}>
+          Tildá las que querés ver como columnas en la tabla. Nombre y % se editan directo acá.
+        </p>
+
+        {listas.length === 0 ? (
+          <p className="troya-subtitulo" style={{ marginBottom: 12 }}>Todavía no hay listas cargadas. Agregá la primera abajo.</p>
+        ) : (
+          <div className="troya-lista" style={{ marginBottom: 12 }}>
+            {listas.map((l) => (
+              <div key={l.id} className="troya-card" style={{ padding: '10px 16px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 220px' }}>
+                  <input type="checkbox" checked={listasVisibles.has(l.id)} onChange={() => toggleLista(l.id)} />
                   <input
                     className="troya-input"
-                    style={{ flex: '0 0 90px' }}
+                    style={{ flex: 1 }}
+                    value={nombresEdit[l.id] ?? ''}
+                    onChange={(e) => setNombresEdit({ ...nombresEdit, [l.id]: e.target.value })}
+                    onBlur={(e) => guardarNombreLista(l.id, e.target.value)}
+                  />
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    className="troya-input"
+                    style={{ width: 80 }}
                     type="number"
                     value={descuentosEdit[l.id] ?? ''}
                     onChange={(e) => setDescuentosEdit({ ...descuentosEdit, [l.id]: e.target.value })}
                     onBlur={(e) => guardarDescuentoLista(l.id, e.target.value)}
                   />
-                  %
-                </label>
-              ))}
-            </div>
+                  <span style={{ fontSize: 14, color: 'var(--muted)' }}>% desc.</span>
+                  <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarLista(l)} title="Eliminar lista">
+                    <IconTacho />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
-      </div>
 
-      <div className="troya-panel" style={{ marginBottom: 14 }}>
-        <button className={`troya-panel-toggle ${panelColumnasAbierto ? 'abierto' : ''}`} onClick={() => setPanelColumnasAbierto(!panelColumnasAbierto)}>
-          Columnas a mostrar
-          <IconMas />
-        </button>
-        {panelColumnasAbierto && (
-          <div className="troya-panel-body">
-            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Tildá las listas de precio que querés ver. Cada una agrega su precio de venta y las dos rentabilidades (sobre costo completo y sobre materia prima).
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-              {listas.map((l) => (
-                <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14 }}>
-                  <input type="checkbox" checked={listasVisibles.has(l.id)} onChange={() => toggleLista(l.id)} />
-                  {l.nombre} ({l.descuento_porcentaje}%)
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
+        <form onSubmit={crearLista} className="troya-form">
+          <input className="troya-input" placeholder="Nombre de la nueva lista (ej: Lista B)" value={nombreListaNueva} onChange={(e) => setNombreListaNueva(e.target.value)} />
+          <input className="troya-input" style={{ flex: '0 0 140px' }} type="number" placeholder="% descuento" value={descuentoListaNueva} onChange={(e) => setDescuentoListaNueva(e.target.value)} />
+          <button type="submit" className="troya-btn">+ Agregar lista</button>
+        </form>
       </div>
 
       <div className="troya-panel" style={{ marginBottom: 20 }}>
