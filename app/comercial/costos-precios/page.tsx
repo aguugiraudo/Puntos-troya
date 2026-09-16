@@ -36,6 +36,10 @@ function ordenCategoria(categoria: string | null): number {
   return idx === -1 ? 998 : idx;
 }
 
+function money(v: number | null | undefined) {
+  return `$${(v ?? 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
+}
+
 export default function CostosPreciosPage() {
   const { usuario } = useAuth();
 
@@ -262,7 +266,7 @@ export default function CostosPreciosPage() {
           const codigo = buscarColumna(fila, ['codigo', 'código', 'cod']);
           const categoria = buscarColumna(fila, ['categoria', 'categoría', 'rubro']);
           const costoMP = Number(buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp', 'reposicion_pesos', 'reposicion', 'reposición']) ?? 0) || null;
-          const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción']) ?? 0) || null;
+          const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción', 'm.o. en horas']) ?? 0) || null;
           const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora', 'costo hora']);
           const valorHora = valorHoraFila ? Number(valorHoraFila) : null;
           const precioLista = Number(buscarColumna(fila, ['precio lista', 'precio', 'precio_l1', 'precio l1']) ?? 0) || null;
@@ -303,7 +307,7 @@ export default function CostosPreciosPage() {
               actualizado_en: new Date().toISOString(),
             }).select('id').single();
 
-            if (errorInsert || !nuevo) throw new Error(errorInsert?.message ?? 'No se pudo crear el producto (sin detalle de error)');
+            if (errorInsert || !nuevo) throw new Error(errorInsert?.message ?? 'No se pudo crear el producto');
             productoId = nuevo.id;
             creados++;
           }
@@ -341,92 +345,7 @@ export default function CostosPreciosPage() {
     }
   }
 
-  function filaProducto(p: Producto) {
-    if (editandoId === p.id) {
-      return (
-        <div key={p.id} className="troya-card troya-card-editando">
-          <div className="troya-form">
-            <input className="troya-input" value={borrador.nombre ?? ''} onChange={(e) => setBorrador({ ...borrador, nombre: e.target.value })} placeholder="Nombre" />
-            <input className="troya-input" value={borrador.codigo ?? ''} onChange={(e) => setBorrador({ ...borrador, codigo: e.target.value })} placeholder="Código" />
-            <select className="troya-input" value={borrador.categoria ?? ''} onChange={(e) => setBorrador({ ...borrador, categoria: e.target.value })}>
-              <option value="">Sin categoría</option>
-              {ORDEN_CATEGORIAS.map((c) => (<option key={c} value={c}>{c}</option>))}
-            </select>
-          </div>
-          <div className="troya-form">
-            <input className="troya-input" type="number" value={borrador.costo_materia_prima ?? ''} onChange={(e) => setBorrador({ ...borrador, costo_materia_prima: e.target.value ? Number(e.target.value) : null })} placeholder="Costo materia prima" />
-            <input className="troya-input" type="number" value={borrador.horas_produccion ?? ''} onChange={(e) => setBorrador({ ...borrador, horas_produccion: e.target.value ? Number(e.target.value) : null })} placeholder="Tiempo de producción (hs)" />
-            <input className="troya-input" type="number" value={borrador.valor_hora_hombre ?? ''} onChange={(e) => setBorrador({ ...borrador, valor_hora_hombre: e.target.value ? Number(e.target.value) : null })} placeholder={`Costo hora (vacío = general: ${valorHoraGlobal})`} />
-            <input className="troya-input" type="number" value={borrador.precio_lista ?? ''} onChange={(e) => setBorrador({ ...borrador, precio_lista: e.target.value ? Number(e.target.value) : null })} placeholder="Precio de lista" />
-          </div>
-          <div className="troya-card-acciones">
-            <button className="troya-btn" onClick={() => guardarEdicion(p.id)}>Guardar cambios</button>
-            <button className="troya-btn troya-btn-secundario" onClick={() => { setEditandoId(null); setBorrador({}); }}>Cancelar</button>
-          </div>
-        </div>
-      );
-    }
-
-    const costoBase = baseRentabilidad === 'completo' ? (p.costo_completo ?? 0) : (p.costo_materia_prima ?? 0);
-
-    return (
-      <div key={p.id} className="troya-card troya-card-editando">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', flexWrap: 'wrap', gap: 10 }}>
-          <div className="troya-card-info">
-            <h3>{p.codigo ? `${p.codigo} — ` : ''}{p.nombre}</h3>
-            <p>
-              MP: ${(p.costo_materia_prima ?? 0).toLocaleString('es-AR')} · {p.horas_produccion ?? 0} hs · Costo hora: ${(p.valor_hora_hombre ?? valorHoraGlobal).toLocaleString('es-AR')} · M.O.: ${(p.costo_mano_obra ?? 0).toLocaleString('es-AR')} · Completo: ${(p.costo_completo ?? 0).toLocaleString('es-AR')} · Precio lista: ${(p.precio_lista ?? 0).toLocaleString('es-AR')}
-            </p>
-          </div>
-          <div className="troya-card-acciones">
-            <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial">
-              <IconHistorial />
-            </button>
-            <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
-              <IconLapiz />
-            </button>
-            <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar">
-              <IconTacho />
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
-          {listas.map((l) => {
-            const precioVenta = (p.precio_lista ?? 0) * (1 - l.descuento_porcentaje / 100);
-            const rentabilidad = precioVenta > 0 ? ((precioVenta - costoBase) / precioVenta) * 100 : 0;
-            const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? 'var(--amber)' : 'var(--orange)';
-            return (
-              <div key={l.id} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 14px', minWidth: 120 }}>
-                <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>{l.nombre} (-{l.descuento_porcentaje}%)</p>
-                <p style={{ fontSize: 13, margin: '2px 0 0', fontWeight: 600 }}>${precioVenta.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
-                <p style={{ fontSize: 15, fontWeight: 700, color, margin: 0, fontFamily: 'var(--font-display)' }}>{rentabilidad.toFixed(1)}%</p>
-              </div>
-            );
-          })}
-        </div>
-
-        {historialAbiertoId === p.id && (
-          <div style={{ marginTop: 10, width: '100%' }}>
-            {!historialPorProducto[p.id] || historialPorProducto[p.id].length === 0 ? (
-              <p className="troya-subtitulo">Sin actualizaciones registradas todavía.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {historialPorProducto[p.id].map((h) => (
-                  <div key={h.id} style={{ display: 'flex', gap: 14, fontSize: 12.5, color: 'var(--muted)', borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
-                    <span style={{ fontWeight: 700, color: 'var(--ink)', minWidth: 80 }}>{new Date(h.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</span>
-                    <span>MP: ${(h.costo_materia_prima ?? 0).toLocaleString('es-AR')}</span>
-                    <span>Completo: ${(h.costo_completo ?? 0).toLocaleString('es-AR')}</span>
-                    <span>Precio: ${(h.precio_lista ?? 0).toLocaleString('es-AR')}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+  const totalColumnas = 6 + listas.length * 2 + 1;
 
   return (
     <div>
@@ -505,15 +424,15 @@ export default function CostosPreciosPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="troya-btn" style={baseRentabilidad === 'completo' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }} onClick={() => setBaseRentabilidad('completo')}>
-            Sobre costo completo
+            Rent. s/ costo completo
           </button>
           <button className="troya-btn" style={baseRentabilidad === 'materia_prima' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }} onClick={() => setBaseRentabilidad('materia_prima')}>
-            Solo materia prima
+            Rent. s/ materia prima
           </button>
         </div>
       </div>
 
-      <div className="troya-panel">
+      <div className="troya-panel" style={{ marginBottom: 20 }}>
         <button className={`troya-panel-toggle ${panelNuevoAbierto ? 'abierto' : ''}`} onClick={() => setPanelNuevoAbierto(!panelNuevoAbierto)}>
           Nuevo producto
           <IconMas />
@@ -534,21 +453,137 @@ export default function CostosPreciosPage() {
       </div>
 
       {cargando ? (
-        <p className="troya-subtitulo" style={{ marginTop: 16 }}>Cargando...</p>
+        <p className="troya-subtitulo">Cargando...</p>
       ) : productosOrdenados.length === 0 ? (
-        <div className="troya-vacio" style={{ marginTop: 16 }}>
+        <div className="troya-vacio">
           <h3>No hay productos</h3>
           <p>Cargá uno manual o importá un Excel.</p>
         </div>
       ) : (
-        grupos.map((grupo) => (
-          <div key={grupo.categoria} className="troya-seccion">
-            <div className="troya-seccion-titulo">{grupo.categoria}</div>
-            <div className="troya-lista">
-              {grupo.items.map((p) => filaProducto(p))}
-            </div>
-          </div>
-        ))
+        <div className="troya-matriz-wrapper">
+          <table className="troya-matriz-tabla">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Costo MP</th>
+                <th>Hs M.O.</th>
+                <th>Costo completo</th>
+                <th>Precio lista</th>
+                {listas.map((l) => (
+                  <>
+                    <th key={l.id + '-precio'}>{l.nombre} ({l.descuento_porcentaje}%)</th>
+                    <th key={l.id + '-rent'}>Rent.</th>
+                  </>
+                ))}
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grupos.map((grupo) => (
+                <>
+                  <tr key={grupo.categoria}>
+                    <td colSpan={totalColumnas} style={{ background: 'var(--tint-orange)', color: 'var(--orange)', fontWeight: 700, fontSize: 12.5, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                      {grupo.categoria}
+                    </td>
+                  </tr>
+                  {grupo.items.map((p) => {
+                    if (editandoId === p.id) {
+                      return (
+                        <tr key={p.id}>
+                          <td colSpan={totalColumnas} style={{ background: 'var(--bg)' }}>
+                            <div className="troya-form" style={{ paddingTop: 10 }}>
+                              <input className="troya-input" value={borrador.nombre ?? ''} onChange={(e) => setBorrador({ ...borrador, nombre: e.target.value })} placeholder="Nombre" />
+                              <input className="troya-input" value={borrador.codigo ?? ''} onChange={(e) => setBorrador({ ...borrador, codigo: e.target.value })} placeholder="Código" />
+                              <select className="troya-input" value={borrador.categoria ?? ''} onChange={(e) => setBorrador({ ...borrador, categoria: e.target.value })}>
+                                <option value="">Sin categoría</option>
+                                {ORDEN_CATEGORIAS.map((c) => (<option key={c} value={c}>{c}</option>))}
+                              </select>
+                            </div>
+                            <div className="troya-form">
+                              <input className="troya-input" type="number" value={borrador.costo_materia_prima ?? ''} onChange={(e) => setBorrador({ ...borrador, costo_materia_prima: e.target.value ? Number(e.target.value) : null })} placeholder="Costo materia prima" />
+                              <input className="troya-input" type="number" value={borrador.horas_produccion ?? ''} onChange={(e) => setBorrador({ ...borrador, horas_produccion: e.target.value ? Number(e.target.value) : null })} placeholder="Horas M.O." />
+                              <input className="troya-input" type="number" value={borrador.valor_hora_hombre ?? ''} onChange={(e) => setBorrador({ ...borrador, valor_hora_hombre: e.target.value ? Number(e.target.value) : null })} placeholder={`Costo hora (vacío = ${valorHoraGlobal})`} />
+                              <input className="troya-input" type="number" value={borrador.precio_lista ?? ''} onChange={(e) => setBorrador({ ...borrador, precio_lista: e.target.value ? Number(e.target.value) : null })} placeholder="Precio de lista" />
+                            </div>
+                            <div className="troya-card-acciones" style={{ paddingBottom: 10 }}>
+                              <button className="troya-btn" onClick={() => guardarEdicion(p.id)}>Guardar cambios</button>
+                              <button className="troya-btn troya-btn-secundario" onClick={() => { setEditandoId(null); setBorrador({}); }}>Cancelar</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const costoBase = baseRentabilidad === 'completo' ? (p.costo_completo ?? 0) : (p.costo_materia_prima ?? 0);
+
+                    return (
+                      <>
+                        <tr key={p.id}>
+                          <td>{p.codigo ?? '—'}</td>
+                          <td style={{ fontWeight: 600 }}>{p.nombre}</td>
+                          <td>{money(p.costo_materia_prima)}</td>
+                          <td>{p.horas_produccion ?? 0}</td>
+                          <td>{money(p.costo_completo)}</td>
+                          <td style={{ fontWeight: 700 }}>{money(p.precio_lista)}</td>
+                          {listas.map((l) => {
+                            const precioVenta = (p.precio_lista ?? 0) * (1 - l.descuento_porcentaje / 100);
+                            const rentabilidad = precioVenta > 0 ? ((precioVenta - costoBase) / precioVenta) * 100 : 0;
+                            const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? '#8A6D00' : '#2E7D32';
+                            const bg = rentabilidad < 0 ? 'var(--tint-red)' : rentabilidad < 15 ? '#FFF3CD' : '#E3F3E4';
+                            return (
+                              <>
+                                <td key={l.id + '-precio'}>{money(precioVenta)}</td>
+                                <td key={l.id + '-rent'}>
+                                  <span style={{ background: bg, color, padding: '3px 9px', borderRadius: 8, fontWeight: 700, fontSize: 12.5 }}>
+                                    {rentabilidad.toFixed(1)}%
+                                  </span>
+                                </td>
+                              </>
+                            );
+                          })}
+                          <td>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial" style={{ width: 30, height: 30 }}>
+                                <IconHistorial />
+                              </button>
+                              <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar" style={{ width: 30, height: 30 }}>
+                                <IconLapiz />
+                              </button>
+                              <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar" style={{ width: 30, height: 30 }}>
+                                <IconTacho />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {historialAbiertoId === p.id && (
+                          <tr key={p.id + '-hist'}>
+                            <td colSpan={totalColumnas} style={{ background: 'var(--bg)' }}>
+                              {!historialPorProducto[p.id] || historialPorProducto[p.id].length === 0 ? (
+                                <p className="troya-subtitulo" style={{ margin: '8px 0' }}>Sin actualizaciones registradas todavía.</p>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0' }}>
+                                  {historialPorProducto[p.id].map((h) => (
+                                    <div key={h.id} style={{ display: 'flex', gap: 14, fontSize: 12.5, color: 'var(--muted)' }}>
+                                      <span style={{ fontWeight: 700, color: 'var(--ink)', minWidth: 80 }}>{new Date(h.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</span>
+                                      <span>MP: {money(h.costo_materia_prima)}</span>
+                                      <span>Completo: {money(h.costo_completo)}</span>
+                                      <span>Precio: {money(h.precio_lista)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
