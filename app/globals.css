@@ -740,3 +740,17 @@ h1, h2, h3 {
 .troya-matriz-wrapper {
   max-width: 100%;
 }
+/* ---------- ENCABEZADO FIJO AL SCROLLEAR (Costos y Precios) ---------- */
+.troya-matriz-tabla thead th {
+  position: sticky;
+  top: 58px;
+  z-index: 5;
+  background: var(--bg);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+@media (min-width: 1024px) {
+  .troya-matriz-tabla thead th {
+    top: 72px;
+  }
+}

@@ -71,6 +71,8 @@ export default function CostosPreciosPage() {
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
 
+  const [panelConfigAbierto, setPanelConfigAbierto] = useState(false);
+
   const [columnasPorLista, setColumnasPorLista] = useState<Record<string, ColumnasLista>>({});
   const [descuentosEdit, setDescuentosEdit] = useState<Record<string, string>>({});
   const [nombresEdit, setNombresEdit] = useState<Record<string, string>>({});
@@ -165,7 +167,6 @@ export default function CostosPreciosPage() {
     grupo.items.push(p);
   });
 
-  // Columnas efectivamente activas, en orden, cada una con su tipo
   type ColActiva = { lista: ListaPrecio; tipo: 'precio' | 'completa' | 'mp' };
   const columnasActivas: ColActiva[] = [];
   listas.forEach((l) => {
@@ -177,6 +178,7 @@ export default function CostosPreciosPage() {
   });
 
   const totalColumnas = 6 + columnasActivas.length + 1;
+  const cantidadListasVisibles = Object.values(columnasPorLista).filter((c) => c.precio || c.completa || c.mp).length;
 
   function toggleColumna(listaId: string, tipo: 'precio' | 'completa' | 'mp') {
     setColumnasPorLista((prev) => ({
@@ -460,93 +462,95 @@ export default function CostosPreciosPage() {
       <div className="troya-header">
         <div>
           <h1>Costos y Precios</h1>
-          <p className="troya-subtitulo">{productos.length} productos</p>
+          <p className="troya-subtitulo">{productos.length} productos · {cantidadListasVisibles} lista(s) visible(s)</p>
         </div>
       </div>
 
-      <div className="troya-panel" style={{ marginBottom: 20 }}>
-        <div className="troya-panel-body" style={{ borderTop: 'none', paddingTop: 16 }}>
-          <div className="troya-form">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
-              Valor hora-hombre general:
-              <input
-                className="troya-input"
-                style={{ flex: '0 0 140px' }}
-                type="number"
-                value={valorHoraGlobalEdit}
-                onChange={(e) => setValorHoraGlobalEdit(e.target.value)}
-              />
-            </label>
-            <button className="troya-btn" onClick={guardarValorHoraGlobal} disabled={guardandoValorHora}>
-              {guardandoValorHora ? 'Guardando...' : 'Guardar'}
-            </button>
-          </div>
-          <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
-            Valor actual guardado: ${valorHoraGlobal.toLocaleString('es-AR')}
-          </p>
-        </div>
-      </div>
+      {/* CONFIGURACIÓN — todo colapsado en un solo panel */}
+      <div className="troya-panel" style={{ marginBottom: 14 }}>
+        <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
+          Configuración (valor hora, listas y columnas)
+          <IconMas />
+        </button>
+        {panelConfigAbierto && (
+          <div className="troya-panel-body">
+            <div className="troya-form" style={{ marginBottom: 4 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                Valor hora-hombre general:
+                <input
+                  className="troya-input"
+                  style={{ flex: '0 0 140px' }}
+                  type="number"
+                  value={valorHoraGlobalEdit}
+                  onChange={(e) => setValorHoraGlobalEdit(e.target.value)}
+                />
+              </label>
+              <button className="troya-btn" onClick={guardarValorHoraGlobal} disabled={guardandoValorHora}>
+                {guardandoValorHora ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 16 }}>
+              Valor actual guardado: ${valorHoraGlobal.toLocaleString('es-AR')}
+            </p>
 
-      {/* LISTAS DE PRECIO — con checkboxes por columna */}
-      <div className="troya-seccion">
-        <div className="troya-seccion-titulo">Listas de precio</div>
-        <p className="troya-subtitulo" style={{ marginTop: -8, marginBottom: 12 }}>
-          Por cada lista, tildá qué columnas querés ver en la tabla: precio con descuento, rentabilidad sobre costo completo, y/o rentabilidad sobre materia prima.
-        </p>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Listas de precio</p>
+            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
+              Tildá qué columnas mostrar por lista: precio, rentabilidad completa y/o rentabilidad sobre materia prima.
+            </p>
 
-        {listas.length === 0 ? (
-          <p className="troya-subtitulo" style={{ marginBottom: 12 }}>Todavía no hay listas cargadas. Agregá la primera abajo.</p>
-        ) : (
-          <div className="troya-lista" style={{ marginBottom: 12 }}>
-            {listas.map((l) => (
-              <div key={l.id} className="troya-card" style={{ padding: '10px 16px', flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 200px' }}>
-                  <input
-                    className="troya-input"
-                    style={{ flex: 1 }}
-                    value={nombresEdit[l.id] ?? ''}
-                    onChange={(e) => setNombresEdit({ ...nombresEdit, [l.id]: e.target.value })}
-                    onBlur={(e) => guardarNombreLista(l.id, e.target.value)}
-                  />
-                  <input
-                    className="troya-input"
-                    style={{ width: 70 }}
-                    type="number"
-                    value={descuentosEdit[l.id] ?? ''}
-                    onChange={(e) => setDescuentosEdit({ ...descuentosEdit, [l.id]: e.target.value })}
-                    onBlur={(e) => guardarDescuentoLista(l.id, e.target.value)}
-                  />
-                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>% desc.</span>
-                </div>
+            {listas.length === 0 ? (
+              <p className="troya-subtitulo" style={{ marginBottom: 12 }}>Todavía no hay listas cargadas. Agregá la primera abajo.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {listas.map((l) => (
+                  <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', background: 'var(--bg)', borderRadius: 10 }}>
+                    <input
+                      className="troya-input"
+                      style={{ flex: '1 1 140px', padding: '7px 10px', fontSize: 13 }}
+                      value={nombresEdit[l.id] ?? ''}
+                      onChange={(e) => setNombresEdit({ ...nombresEdit, [l.id]: e.target.value })}
+                      onBlur={(e) => guardarNombreLista(l.id, e.target.value)}
+                    />
+                    <input
+                      className="troya-input"
+                      style={{ width: 56, padding: '7px 8px', fontSize: 13 }}
+                      type="number"
+                      value={descuentosEdit[l.id] ?? ''}
+                      onChange={(e) => setDescuentosEdit({ ...descuentosEdit, [l.id]: e.target.value })}
+                      onBlur={(e) => guardarDescuentoLista(l.id, e.target.value)}
+                    />
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>%</span>
 
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-                    <input type="checkbox" checked={columnasPorLista[l.id]?.precio ?? false} onChange={() => toggleColumna(l.id, 'precio')} />
-                    Precio
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-                    <input type="checkbox" checked={columnasPorLista[l.id]?.completa ?? false} onChange={() => toggleColumna(l.id, 'completa')} />
-                    Rent. Compl.
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-                    <input type="checkbox" checked={columnasPorLista[l.id]?.mp ?? false} onChange={() => toggleColumna(l.id, 'mp')} />
-                    Rent. MP
-                  </label>
-                </div>
+                    <span style={{ width: 1, height: 20, background: 'var(--line)' }} />
 
-                <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarLista(l)} title="Eliminar lista">
-                  <IconTacho />
-                </button>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                      <input type="checkbox" checked={columnasPorLista[l.id]?.precio ?? false} onChange={() => toggleColumna(l.id, 'precio')} />
+                      Precio
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                      <input type="checkbox" checked={columnasPorLista[l.id]?.completa ?? false} onChange={() => toggleColumna(l.id, 'completa')} />
+                      Rent. Compl.
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                      <input type="checkbox" checked={columnasPorLista[l.id]?.mp ?? false} onChange={() => toggleColumna(l.id, 'mp')} />
+                      Rent. MP
+                    </label>
+
+                    <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarLista(l)} title="Eliminar lista" style={{ width: 26, height: 26, marginLeft: 'auto' }}>
+                      <IconTacho />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            <form onSubmit={crearLista} className="troya-form">
+              <input className="troya-input" placeholder="Nombre de la nueva lista (ej: Lista B)" value={nombreListaNueva} onChange={(e) => setNombreListaNueva(e.target.value)} />
+              <input className="troya-input" style={{ flex: '0 0 140px' }} type="number" placeholder="% descuento" value={descuentoListaNueva} onChange={(e) => setDescuentoListaNueva(e.target.value)} />
+              <button type="submit" className="troya-btn">+ Agregar lista</button>
+            </form>
           </div>
         )}
-
-        <form onSubmit={crearLista} className="troya-form">
-          <input className="troya-input" placeholder="Nombre de la nueva lista (ej: Lista B)" value={nombreListaNueva} onChange={(e) => setNombreListaNueva(e.target.value)} />
-          <input className="troya-input" style={{ flex: '0 0 140px' }} type="number" placeholder="% descuento" value={descuentoListaNueva} onChange={(e) => setDescuentoListaNueva(e.target.value)} />
-          <button type="submit" className="troya-btn">+ Agregar lista</button>
-        </form>
       </div>
 
       <div className="troya-panel" style={{ marginBottom: 20 }}>
