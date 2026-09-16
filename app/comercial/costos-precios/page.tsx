@@ -30,6 +30,8 @@ type HistorialItem = {
   precio_lista: number | null;
 };
 
+type ColumnasLista = { precio: boolean; completa: boolean; mp: boolean };
+
 function ordenCategoria(categoria: string | null): number {
   if (!categoria) return 999;
   const idx = ORDEN_CATEGORIAS.indexOf(categoria);
@@ -44,7 +46,7 @@ function badgeRentabilidad(rentabilidad: number) {
   const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? '#8A6D00' : '#2E7D32';
   const bg = rentabilidad < 0 ? 'var(--tint-red)' : rentabilidad < 15 ? '#FFF3CD' : '#E3F3E4';
   return (
-    <span style={{ background: bg, color, padding: '3px 9px', borderRadius: 8, fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>
+    <span style={{ background: bg, color, padding: '2px 7px', borderRadius: 7, fontWeight: 700, fontSize: 11.5, whiteSpace: 'nowrap' }}>
       {rentabilidad.toFixed(1)}%
     </span>
   );
@@ -69,7 +71,7 @@ export default function CostosPreciosPage() {
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
 
-  const [listasVisibles, setListasVisibles] = useState<Set<string>>(new Set());
+  const [columnasPorLista, setColumnasPorLista] = useState<Record<string, ColumnasLista>>({});
   const [descuentosEdit, setDescuentosEdit] = useState<Record<string, string>>({});
   const [nombresEdit, setNombresEdit] = useState<Record<string, string>>({});
   const [nombreListaNueva, setNombreListaNueva] = useState('');
@@ -99,11 +101,17 @@ export default function CostosPreciosPage() {
 
     const { data: listasData } = await supabase.from('listas_precio').select('*').order('orden');
     setListas(listasData ?? []);
+
     const mapaDescuentos: Record<string, string> = {};
     const mapaNombres: Record<string, string> = {};
-    (listasData ?? []).forEach((l) => {
-      mapaDescuentos[l.id] = String(l.descuento_porcentaje);
-      mapaNombres[l.id] = l.nombre;
+    setColumnasPorLista((prevCols) => {
+      const nuevo: Record<string, ColumnasLista> = {};
+      (listasData ?? []).forEach((l) => {
+        mapaDescuentos[l.id] = String(l.descuento_porcentaje);
+        mapaNombres[l.id] = l.nombre;
+        nuevo[l.id] = prevCols[l.id] ?? { precio: false, completa: false, mp: false };
+      });
+      return nuevo;
     });
     setDescuentosEdit(mapaDescuentos);
     setNombresEdit(mapaNombres);
@@ -157,16 +165,24 @@ export default function CostosPreciosPage() {
     grupo.items.push(p);
   });
 
-  const listasActivas = listas.filter((l) => listasVisibles.has(l.id));
-  const totalColumnas = 6 + listasActivas.length * 3 + 1;
+  // Columnas efectivamente activas, en orden, cada una con su tipo
+  type ColActiva = { lista: ListaPrecio; tipo: 'precio' | 'completa' | 'mp' };
+  const columnasActivas: ColActiva[] = [];
+  listas.forEach((l) => {
+    const cols = columnasPorLista[l.id];
+    if (!cols) return;
+    if (cols.precio) columnasActivas.push({ lista: l, tipo: 'precio' });
+    if (cols.completa) columnasActivas.push({ lista: l, tipo: 'completa' });
+    if (cols.mp) columnasActivas.push({ lista: l, tipo: 'mp' });
+  });
 
-  function toggleLista(id: string) {
-    setListasVisibles((prev) => {
-      const nuevo = new Set(prev);
-      if (nuevo.has(id)) nuevo.delete(id);
-      else nuevo.add(id);
-      return nuevo;
-    });
+  const totalColumnas = 6 + columnasActivas.length + 1;
+
+  function toggleColumna(listaId: string, tipo: 'precio' | 'completa' | 'mp') {
+    setColumnasPorLista((prev) => ({
+      ...prev,
+      [listaId]: { ...prev[listaId], [tipo]: !prev[listaId]?.[tipo] },
+    }));
   }
 
   function calcular(costoMP: number | null, horas: number | null, valorHora: number | null, precioLista: number | null) {
@@ -235,11 +251,6 @@ export default function CostosPreciosPage() {
     if (!confirmado) return;
     const { error } = await supabase.from('listas_precio').delete().eq('id', l.id);
     if (error) { alert('No se pudo eliminar: ' + error.message); return; }
-    setListasVisibles((prev) => {
-      const nuevo = new Set(prev);
-      nuevo.delete(l.id);
-      return nuevo;
-    });
     cargarTodo();
   }
 
@@ -476,11 +487,11 @@ export default function CostosPreciosPage() {
         </div>
       </div>
 
-      {/* LISTAS DE PRECIO */}
+      {/* LISTAS DE PRECIO — con checkboxes por columna */}
       <div className="troya-seccion">
         <div className="troya-seccion-titulo">Listas de precio</div>
         <p className="troya-subtitulo" style={{ marginTop: -8, marginBottom: 12 }}>
-          Tildá las que querés ver como columnas en la tabla. Nombre y % se editan directo acá.
+          Por cada lista, tildá qué columnas querés ver en la tabla: precio con descuento, rentabilidad sobre costo completo, y/o rentabilidad sobre materia prima.
         </p>
 
         {listas.length === 0 ? (
@@ -488,9 +499,8 @@ export default function CostosPreciosPage() {
         ) : (
           <div className="troya-lista" style={{ marginBottom: 12 }}>
             {listas.map((l) => (
-              <div key={l.id} className="troya-card" style={{ padding: '10px 16px', flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 220px' }}>
-                  <input type="checkbox" checked={listasVisibles.has(l.id)} onChange={() => toggleLista(l.id)} />
+              <div key={l.id} className="troya-card" style={{ padding: '10px 16px', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 200px' }}>
                   <input
                     className="troya-input"
                     style={{ flex: 1 }}
@@ -498,21 +508,35 @@ export default function CostosPreciosPage() {
                     onChange={(e) => setNombresEdit({ ...nombresEdit, [l.id]: e.target.value })}
                     onBlur={(e) => guardarNombreLista(l.id, e.target.value)}
                   />
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
                     className="troya-input"
-                    style={{ width: 80 }}
+                    style={{ width: 70 }}
                     type="number"
                     value={descuentosEdit[l.id] ?? ''}
                     onChange={(e) => setDescuentosEdit({ ...descuentosEdit, [l.id]: e.target.value })}
                     onBlur={(e) => guardarDescuentoLista(l.id, e.target.value)}
                   />
-                  <span style={{ fontSize: 14, color: 'var(--muted)' }}>% desc.</span>
-                  <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarLista(l)} title="Eliminar lista">
-                    <IconTacho />
-                  </button>
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>% desc.</span>
                 </div>
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" checked={columnasPorLista[l.id]?.precio ?? false} onChange={() => toggleColumna(l.id, 'precio')} />
+                    Precio
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" checked={columnasPorLista[l.id]?.completa ?? false} onChange={() => toggleColumna(l.id, 'completa')} />
+                    Rent. Compl.
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" checked={columnasPorLista[l.id]?.mp ?? false} onChange={() => toggleColumna(l.id, 'mp')} />
+                    Rent. MP
+                  </label>
+                </div>
+
+                <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarLista(l)} title="Eliminar lista">
+                  <IconTacho />
+                </button>
               </div>
             ))}
           </div>
@@ -582,30 +606,30 @@ export default function CostosPreciosPage() {
         </div>
       ) : (
         <div className="troya-matriz-wrapper">
-          <table className="troya-matriz-tabla">
+          <table className="troya-matriz-tabla troya-matriz-tabla--compacta">
             <thead>
               <tr>
                 <th>Código</th>
                 <th>Producto</th>
-                <th>Costo MP</th>
-                <th>Hs M.O.</th>
-                <th>Costo completo</th>
-                <th>Precio lista</th>
-                {listasActivas.map((l) => (
-                  <>
-                    <th key={l.id + '-precio'}>{l.nombre} ({l.descuento_porcentaje}%)</th>
-                    <th key={l.id + '-rc'}>Rent. completa</th>
-                    <th key={l.id + '-rm'}>Rent. mat. prima</th>
-                  </>
+                <th>MP</th>
+                <th>Hs</th>
+                <th>Completo</th>
+                <th>Lista</th>
+                {columnasActivas.map((c, idx) => (
+                  <th key={c.lista.id + c.tipo + idx}>
+                    {c.tipo === 'precio' && `${c.lista.descuento_porcentaje}%`}
+                    {c.tipo === 'completa' && `Compl. ${c.lista.descuento_porcentaje}%`}
+                    {c.tipo === 'mp' && `MP ${c.lista.descuento_porcentaje}%`}
+                  </th>
                 ))}
-                <th>Acciones</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {grupos.map((grupo) => (
                 <>
                   <tr key={grupo.categoria}>
-                    <td colSpan={totalColumnas} style={{ background: 'var(--tint-orange)', color: 'var(--orange)', fontWeight: 700, fontSize: 12.5, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                    <td colSpan={totalColumnas} style={{ background: 'var(--tint-orange)', color: 'var(--orange)', fontWeight: 700, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                       {grupo.categoria}
                     </td>
                   </tr>
@@ -646,27 +670,25 @@ export default function CostosPreciosPage() {
                           <td>{p.horas_produccion ?? 0}</td>
                           <td>{money(p.costo_completo)}</td>
                           <td style={{ fontWeight: 700 }}>{money(p.precio_lista)}</td>
-                          {listasActivas.map((l) => {
-                            const precioVenta = (p.precio_lista ?? 0) * (1 - l.descuento_porcentaje / 100);
-                            const rentCompleta = precioVenta > 0 ? ((precioVenta - (p.costo_completo ?? 0)) / precioVenta) * 100 : 0;
+                          {columnasActivas.map((c, idx) => {
+                            const precioVenta = (p.precio_lista ?? 0) * (1 - c.lista.descuento_porcentaje / 100);
+                            if (c.tipo === 'precio') return <td key={c.lista.id + c.tipo + idx}>{money(precioVenta)}</td>;
+                            if (c.tipo === 'completa') {
+                              const rent = precioVenta > 0 ? ((precioVenta - (p.costo_completo ?? 0)) / precioVenta) * 100 : 0;
+                              return <td key={c.lista.id + c.tipo + idx}>{badgeRentabilidad(rent)}</td>;
+                            }
                             const rentMP = precioVenta > 0 ? ((precioVenta - (p.costo_materia_prima ?? 0)) / precioVenta) * 100 : 0;
-                            return (
-                              <>
-                                <td key={l.id + '-precio'}>{money(precioVenta)}</td>
-                                <td key={l.id + '-rc'}>{badgeRentabilidad(rentCompleta)}</td>
-                                <td key={l.id + '-rm'}>{badgeRentabilidad(rentMP)}</td>
-                              </>
-                            );
+                            return <td key={c.lista.id + c.tipo + idx}>{badgeRentabilidad(rentMP)}</td>;
                           })}
                           <td>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial" style={{ width: 30, height: 30 }}>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial" style={{ width: 26, height: 26 }}>
                                 <IconHistorial />
                               </button>
-                              <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar" style={{ width: 30, height: 30 }}>
+                              <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar" style={{ width: 26, height: 26 }}>
                                 <IconLapiz />
                               </button>
-                              <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar" style={{ width: 30, height: 30 }}>
+                              <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar" style={{ width: 26, height: 26 }}>
                                 <IconTacho />
                               </button>
                             </div>
@@ -680,7 +702,7 @@ export default function CostosPreciosPage() {
                               ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0' }}>
                                   {historialPorProducto[p.id].map((h) => (
-                                    <div key={h.id} style={{ display: 'flex', gap: 14, fontSize: 12.5, color: 'var(--muted)' }}>
+                                    <div key={h.id} style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--muted)' }}>
                                       <span style={{ fontWeight: 700, color: 'var(--ink)', minWidth: 80 }}>{new Date(h.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</span>
                                       <span>MP: {money(h.costo_materia_prima)}</span>
                                       <span>Completo: {money(h.costo_completo)}</span>
