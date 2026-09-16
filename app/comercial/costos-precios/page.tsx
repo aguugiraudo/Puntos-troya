@@ -40,6 +40,16 @@ function money(v: number | null | undefined) {
   return `$${(v ?? 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 }
 
+function badgeRentabilidad(rentabilidad: number) {
+  const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? '#8A6D00' : '#2E7D32';
+  const bg = rentabilidad < 0 ? 'var(--tint-red)' : rentabilidad < 15 ? '#FFF3CD' : '#E3F3E4';
+  return (
+    <span style={{ background: bg, color, padding: '3px 9px', borderRadius: 8, fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>
+      {rentabilidad.toFixed(1)}%
+    </span>
+  );
+}
+
 export default function CostosPreciosPage() {
   const { usuario } = useAuth();
 
@@ -48,7 +58,9 @@ export default function CostosPreciosPage() {
   const [valorHoraGlobal, setValorHoraGlobal] = useState(0);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
-  const [baseRentabilidad, setBaseRentabilidad] = useState<'completo' | 'materia_prima'>('completo');
+
+  const [listasVisibles, setListasVisibles] = useState<Set<string>>(new Set());
+  const [panelColumnasAbierto, setPanelColumnasAbierto] = useState(false);
 
   const [panelNuevoAbierto, setPanelNuevoAbierto] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState('');
@@ -122,6 +134,18 @@ export default function CostosPreciosPage() {
     }
     grupo.items.push(p);
   });
+
+  const listasActivas = listas.filter((l) => listasVisibles.has(l.id));
+  const totalColumnas = 6 + listasActivas.length * 3 + 1;
+
+  function toggleLista(id: string) {
+    setListasVisibles((prev) => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(id)) nuevo.delete(id);
+      else nuevo.add(id);
+      return nuevo;
+    });
+  }
 
   function calcular(costoMP: number | null, horas: number | null, valorHora: number | null, precioLista: number | null) {
     const mp = costoMP ?? 0;
@@ -345,8 +369,6 @@ export default function CostosPreciosPage() {
     }
   }
 
-  const totalColumnas = 6 + listas.length * 2 + 1;
-
   return (
     <div>
       <div className="troya-header">
@@ -394,6 +416,28 @@ export default function CostosPreciosPage() {
         )}
       </div>
 
+      <div className="troya-panel" style={{ marginBottom: 14 }}>
+        <button className={`troya-panel-toggle ${panelColumnasAbierto ? 'abierto' : ''}`} onClick={() => setPanelColumnasAbierto(!panelColumnasAbierto)}>
+          Columnas a mostrar
+          <IconMas />
+        </button>
+        {panelColumnasAbierto && (
+          <div className="troya-panel-body">
+            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
+              Tildá las listas de precio que querés ver. Cada una agrega su precio de venta y las dos rentabilidades (sobre costo completo y sobre materia prima).
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+              {listas.map((l) => (
+                <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14 }}>
+                  <input type="checkbox" checked={listasVisibles.has(l.id)} onChange={() => toggleLista(l.id)} />
+                  {l.nombre} ({l.descuento_porcentaje}%)
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="troya-panel" style={{ marginBottom: 20 }}>
         <button className={`troya-panel-toggle ${panelImportarAbierto ? 'abierto' : ''}`} onClick={() => setPanelImportarAbierto(!panelImportarAbierto)}>
           Importar actualización desde Excel
@@ -417,19 +461,9 @@ export default function CostosPreciosPage() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-        <div className="troya-buscador" style={{ marginBottom: 0, flex: 1 }}>
-          <IconBuscar />
-          <input type="text" placeholder="Buscar por nombre o código..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="troya-btn" style={baseRentabilidad === 'completo' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }} onClick={() => setBaseRentabilidad('completo')}>
-            Rent. s/ costo completo
-          </button>
-          <button className="troya-btn" style={baseRentabilidad === 'materia_prima' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }} onClick={() => setBaseRentabilidad('materia_prima')}>
-            Rent. s/ materia prima
-          </button>
-        </div>
+      <div className="troya-buscador">
+        <IconBuscar />
+        <input type="text" placeholder="Buscar por nombre o código..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
       </div>
 
       <div className="troya-panel" style={{ marginBottom: 20 }}>
@@ -470,10 +504,11 @@ export default function CostosPreciosPage() {
                 <th>Hs M.O.</th>
                 <th>Costo completo</th>
                 <th>Precio lista</th>
-                {listas.map((l) => (
+                {listasActivas.map((l) => (
                   <>
                     <th key={l.id + '-precio'}>{l.nombre} ({l.descuento_porcentaje}%)</th>
-                    <th key={l.id + '-rent'}>Rent.</th>
+                    <th key={l.id + '-rc'}>Rent. completa</th>
+                    <th key={l.id + '-rm'}>Rent. mat. prima</th>
                   </>
                 ))}
                 <th>Acciones</th>
@@ -515,8 +550,6 @@ export default function CostosPreciosPage() {
                       );
                     }
 
-                    const costoBase = baseRentabilidad === 'completo' ? (p.costo_completo ?? 0) : (p.costo_materia_prima ?? 0);
-
                     return (
                       <>
                         <tr key={p.id}>
@@ -526,19 +559,15 @@ export default function CostosPreciosPage() {
                           <td>{p.horas_produccion ?? 0}</td>
                           <td>{money(p.costo_completo)}</td>
                           <td style={{ fontWeight: 700 }}>{money(p.precio_lista)}</td>
-                          {listas.map((l) => {
+                          {listasActivas.map((l) => {
                             const precioVenta = (p.precio_lista ?? 0) * (1 - l.descuento_porcentaje / 100);
-                            const rentabilidad = precioVenta > 0 ? ((precioVenta - costoBase) / precioVenta) * 100 : 0;
-                            const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? '#8A6D00' : '#2E7D32';
-                            const bg = rentabilidad < 0 ? 'var(--tint-red)' : rentabilidad < 15 ? '#FFF3CD' : '#E3F3E4';
+                            const rentCompleta = precioVenta > 0 ? ((precioVenta - (p.costo_completo ?? 0)) / precioVenta) * 100 : 0;
+                            const rentMP = precioVenta > 0 ? ((precioVenta - (p.costo_materia_prima ?? 0)) / precioVenta) * 100 : 0;
                             return (
                               <>
                                 <td key={l.id + '-precio'}>{money(precioVenta)}</td>
-                                <td key={l.id + '-rent'}>
-                                  <span style={{ background: bg, color, padding: '3px 9px', borderRadius: 8, fontWeight: 700, fontSize: 12.5 }}>
-                                    {rentabilidad.toFixed(1)}%
-                                  </span>
-                                </td>
+                                <td key={l.id + '-rc'}>{badgeRentabilidad(rentCompleta)}</td>
+                                <td key={l.id + '-rm'}>{badgeRentabilidad(rentMP)}</td>
                               </>
                             );
                           })}
