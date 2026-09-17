@@ -334,12 +334,13 @@ h1, h2, h3 {
   color: var(--muted);
 }
 
-/* ---------- MATRIZ DE PERMISOS ---------- */
+/* ---------- MATRIZ DE PERMISOS (Panel de Accesos) ---------- */
 .troya-matriz-wrapper {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
+  max-width: 100%;
 }
 
 .troya-matriz-tabla {
@@ -412,6 +413,23 @@ h1, h2, h3 {
 .troya-matriz-select--sin_acceso {
   background-color: #F1EDE8;
   color: var(--muted);
+}
+
+/* ---------- TABLA COMPACTA (Costos y Precios) ---------- */
+.troya-matriz-tabla--compacta th,
+.troya-matriz-tabla--compacta td {
+  padding: 7px 10px;
+  font-size: 12.5px;
+}
+
+.troya-matriz-tabla--compacta {
+  width: auto;
+}
+
+/* ---------- ENCABEZADO DE TABLA (sin sticky, para evitar glitches de render) ---------- */
+.troya-matriz-tabla thead th {
+  background: var(--bg);
+  box-shadow: 0 1px 0 var(--line);
 }
 
 /* ---------- RESPONSIVE: escritorio ---------- */
@@ -725,37 +743,4 @@ h1, h2, h3 {
   font-size: 14px;
   max-width: 320px;
   margin: 0 auto;
-}
-/* ---------- TABLA COMPACTA (Costos y Precios) ---------- */
-.troya-matriz-tabla--compacta th,
-.troya-matriz-tabla--compacta td {
-  padding: 7px 10px;
-  font-size: 12.5px;
-}
-
-.troya-matriz-tabla--compacta {
-  width: auto;
-}
-
-.troya-matriz-wrapper {
-  max-width: 100%;
-}
-/* ---------- ENCABEZADO FIJO AL SCROLLEAR (Costos y Precios) ---------- */
-.troya-matriz-tabla thead th {
-  position: sticky;
-  top: 58px;
-  z-index: 5;
-  background: var(--bg);
-  box-shadow: 0 1px 0 var(--line);
-}
-
-@media (min-width: 1024px) {
-  .troya-matriz-tabla thead th {
-    top: 72px;
-  }
-}
-/* ---------- FIX: que el encabezado fijo tape bien los botones de abajo ---------- */
-.troya-matriz-tabla tbody td {
-  position: relative;
-  z-index: 1;
 }
