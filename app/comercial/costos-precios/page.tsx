@@ -375,24 +375,30 @@ export default function CostosPreciosPage() {
         const nombre = String(nombreCrudo).trim();
 
         try {
-          const codigo = buscarColumna(fila, ['codigo', 'código', 'cod']);
-          const categoria = buscarColumna(fila, ['categoria', 'categoría', 'rubro']);
-          const costoMP = Number(buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp', 'reposicion_pesos', 'reposicion', 'reposición']) ?? 0) || null;
-          const horas = Number(buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción', 'm.o. en horas']) ?? 0) || null;
+          const codigoFila = buscarColumna(fila, ['codigo', 'código', 'cod']);
+          const categoriaFila = buscarColumna(fila, ['categoria', 'categoría', 'rubro']);
+          const costoMPFila = buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp', 'reposicion_pesos', 'reposicion', 'reposición']);
+          const horasFila = buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción', 'm.o. en horas']);
           const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora', 'costo hora']);
-          const valorHora = valorHoraFila ? Number(valorHoraFila) : null;
-          const precioLista = Number(buscarColumna(fila, ['precio lista', 'precio', 'precio_l1', 'precio l1']) ?? 0) || null;
-
-          const { manoObra, completo } = calcular(costoMP, horas, valorHora, precioLista);
+          const precioListaFila = buscarColumna(fila, ['precio lista', 'precio', 'precio_l1', 'precio l1']);
 
           const existente = productos.find((p) => p.nombre.toLowerCase().trim() === nombre.toLowerCase());
+
+          // Si la columna vino en el Excel, se usa ese valor. Si NO vino, se conserva
+          // lo que el producto ya tenía cargado (en vez de pisarlo con 0/null).
+          const costoMP = costoMPFila !== undefined ? Number(costoMPFila) || null : (existente?.costo_materia_prima ?? null);
+          const horas = horasFila !== undefined ? Number(horasFila) || null : (existente?.horas_produccion ?? null);
+          const valorHora = valorHoraFila !== undefined ? Number(valorHoraFila) || null : (existente?.valor_hora_hombre ?? null);
+          const precioLista = precioListaFila !== undefined ? Number(precioListaFila) || null : (existente?.precio_lista ?? null);
+
+          const { manoObra, completo } = calcular(costoMP, horas, valorHora, precioLista);
 
           let productoId: string;
 
           if (existente) {
             const { error: errorUpdate } = await supabase.from('productos').update({
-              codigo: codigo ? String(codigo) : existente.codigo,
-              categoria: categoria ? String(categoria) : existente.categoria,
+              codigo: codigoFila !== undefined ? String(codigoFila) : existente.codigo,
+              categoria: categoriaFila !== undefined ? String(categoriaFila) : existente.categoria,
               costo_materia_prima: costoMP,
               horas_produccion: horas,
               valor_hora_hombre: valorHora,
@@ -408,8 +414,8 @@ export default function CostosPreciosPage() {
           } else {
             const { data: nuevo, error: errorInsert } = await supabase.from('productos').insert({
               nombre,
-              codigo: codigo ? String(codigo) : null,
-              categoria: categoria ? String(categoria) : null,
+              codigo: codigoFila !== undefined ? String(codigoFila) : null,
+              categoria: categoriaFila !== undefined ? String(categoriaFila) : null,
               costo_materia_prima: costoMP,
               horas_produccion: horas,
               valor_hora_hombre: valorHora,
@@ -466,7 +472,6 @@ export default function CostosPreciosPage() {
         </div>
       </div>
 
-      {/* CONFIGURACIÓN — todo colapsado en un solo panel */}
       <div className="troya-panel" style={{ marginBottom: 14 }}>
         <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
           Configuración (valor hora, listas y columnas)
@@ -562,6 +567,7 @@ export default function CostosPreciosPage() {
           <div className="troya-panel-body">
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
               Reconoce: CODIGO, DESCRIPCION, Rubro, REPOSICION_PESOS (costo materia prima), PRECIO_L1 (precio de lista).
+              Si una columna no viene en el archivo, se conserva el valor que ya tenía cargado ese producto (no se borra).
               Si el producto ya existe (por nombre), se actualiza; si no, se crea.
             </p>
             <div className="troya-form">
