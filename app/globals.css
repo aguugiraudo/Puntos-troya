@@ -235,7 +235,7 @@ h1, h2, h3 {
   font-family: var(--font-body);
 }
 
-/* ---------- HUB "MÁS" ---------- */
+/* ---------- HUB "MÁS" / "COMERCIAL" ---------- */
 .troya-hub-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -334,7 +334,7 @@ h1, h2, h3 {
   color: var(--muted);
 }
 
-/* ---------- MATRIZ DE PERMISOS (Panel de Accesos) ---------- */
+/* ---------- MATRIZ / TABLA GENERAL (Panel de Accesos, Costos, Stock) ---------- */
 .troya-matriz-wrapper {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -368,6 +368,7 @@ h1, h2, h3 {
   background: var(--bg);
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  box-shadow: 0 1px 0 var(--line);
 }
 
 .troya-matriz-tabla td:first-child,
@@ -415,21 +416,34 @@ h1, h2, h3 {
   color: var(--muted);
 }
 
-/* ---------- TABLA COMPACTA (Costos y Precios) ---------- */
+/* ---------- TABLA COMPACTA QUE SIEMPRE ENTRA EN PANTALLA (Costos, Stock) ---------- */
+/* table-layout: fixed hace que el ancho lo reparta el navegador entre las columnas
+   visibles en vez de agrandarse según el contenido — así nunca fuerza scroll
+   horizontal salvo en celulares muy angostos. */
+.troya-matriz-tabla--compacta {
+  table-layout: fixed;
+  width: 100%;
+}
+
 .troya-matriz-tabla--compacta th,
 .troya-matriz-tabla--compacta td {
-  padding: 7px 10px;
-  font-size: 12.5px;
+  padding: 7px 8px;
+  font-size: 12px;
+  white-space: normal;
+  word-break: break-word;
 }
 
-.troya-matriz-tabla--compacta {
-  width: auto;
+.troya-matriz-tabla--compacta th {
+  white-space: normal;
+  line-height: 1.2;
 }
 
-/* ---------- ENCABEZADO DE TABLA (sin sticky, para evitar glitches de render) ---------- */
-.troya-matriz-tabla thead th {
-  background: var(--bg);
-  box-shadow: 0 1px 0 var(--line);
+/* La columna "Producto" es la única con texto largo: se trunca con "..." en vez
+   de forzar el ancho de toda la tabla. */
+.troya-celda-producto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- RESPONSIVE: escritorio ---------- */

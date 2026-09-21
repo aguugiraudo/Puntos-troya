@@ -135,6 +135,8 @@ export default function StockPage() {
     return acc + precioUnit * (f.stock_total ?? 0);
   }, 0);
 
+  const columnasExtra = (mostrarCentro ? 1 : 0) + (mostrarRafaela ? 1 : 0) + (mostrarTransitoCentro ? 1 : 0) + (mostrarTransitoRafaela ? 1 : 0);
+
   async function guardarDescuento() {
     setGuardandoDescuento(true);
     const { error } = await supabase
@@ -163,7 +165,6 @@ export default function StockPage() {
       const hoja = workbook.Sheets[workbook.SheetNames[0]];
       const filasCrudas: any[][] = XLSX.utils.sheet_to_json(hoja, { header: 1 });
 
-      // Buscamos la fila de encabezados real (puede haber filas de título/resumen arriba)
       let indiceHeader = -1;
       let mapaColumnas: Record<string, number> = {};
 
@@ -337,6 +338,17 @@ export default function StockPage() {
       ) : (
         <div className="troya-matriz-wrapper">
           <table className="troya-matriz-tabla troya-matriz-tabla--compacta">
+            <colgroup>
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '24%' }} />
+              <col style={{ width: '9%' }} />
+              {mostrarCentro && <col style={{ width: '9%' }} />}
+              {mostrarRafaela && <col style={{ width: '9%' }} />}
+              {mostrarTransitoCentro && <col style={{ width: '9%' }} />}
+              {mostrarTransitoRafaela && <col style={{ width: '9%' }} />}
+              <col style={{ width: '11%' }} />
+              <col />
+            </colgroup>
             <thead>
               <tr>
                 <th>Código</th>
@@ -355,8 +367,8 @@ export default function StockPage() {
                 <>
                   <tr key={grupo.categoria}>
                     <td
-                      colSpan={5 + (mostrarCentro ? 1 : 0) + (mostrarRafaela ? 1 : 0) + (mostrarTransitoCentro ? 1 : 0) + (mostrarTransitoRafaela ? 1 : 0)}
-                      style={{ background: 'var(--tint-orange)', color: 'var(--orange)', fontWeight: 700, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: 0.4 }}
+                      colSpan={5 + columnasExtra}
+                      style={{ background: 'var(--tint-orange)', color: 'var(--orange)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 }}
                     >
                       {grupo.categoria}
                     </td>
@@ -368,7 +380,9 @@ export default function StockPage() {
                     return (
                       <tr key={f.id}>
                         <td>{f.productos?.codigo ?? '—'}</td>
-                        <td style={{ fontWeight: 600 }}>{f.productos?.nombre}</td>
+                        <td className="troya-celda-producto" style={{ fontWeight: 600 }} title={f.productos?.nombre}>
+                          {f.productos?.nombre}
+                        </td>
                         <td style={{ fontWeight: 700 }}>{numero(f.stock_total)}</td>
                         {mostrarCentro && <td>{numero(f.stock_centro_logistico)}</td>}
                         {mostrarRafaela && <td>{numero(f.stock_rafaela)}</td>}
