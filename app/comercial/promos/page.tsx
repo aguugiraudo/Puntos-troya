@@ -424,7 +424,7 @@ export default function PromosPage() {
       ) : promosFiltradas.length === 0 ? (
         <div className="troya-vacio">
           <h3>Todavía no armaste ninguna promo</h3>
-          <p>Usá "Nueva promo" arriba para crear la primera.</p>
+          <p>Usá &ldquo;Nueva promo&rdquo; arriba para crear la primera.</p>
         </div>
       ) : (
         <div className="troya-lista">
