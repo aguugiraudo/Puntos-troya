@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 
 const MODULOS = [
   { href: '/comercial/costos-precios', nombre: 'Costos y Precios', descripcion: 'Rentabilidad por lista e historial de actualizaciones', icon: IconCostos },
+  { href: '/comercial/promos', nombre: 'Promos', descripcion: 'Armá combos y ofertas, con rentabilidad al instante', icon: IconPromos },
 ];
 
 export default function ComercialPage() {
@@ -51,6 +52,15 @@ function IconCostos() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 1v22" />
       <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+    </svg>
+  );
+}
+
+function IconPromos() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.59 13.41L11 3.83A2 2 0 009.59 3.24L3 3v6.59a2 2 0 00.59 1.41l9.59 9.59a2 2 0 002.82 0l4.59-4.59a2 2 0 000-2.82z" />
+      <circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" stroke="none" />
     </svg>
   );
 }
