@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 
 const ORDEN_CATEGORIAS = ['Fogoneros', 'Accesorios Fogoneros', 'Hornos', 'Estufas'];
+const MODULO = 'costos_precios';
 
 type Producto = {
   id: string;
@@ -61,7 +62,9 @@ function slugify(texto: string) {
 }
 
 export default function CostosPreciosPage() {
-  const { usuario } = useAuth();
+  const { puedeVer, puedeEditar } = useAuth();
+  const puedeVerModulo = puedeVer(MODULO);
+  const puedeEditarModulo = puedeEditar(MODULO);
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [listas, setListas] = useState<ListaPrecio[]>([]);
@@ -133,14 +136,14 @@ export default function CostosPreciosPage() {
   }
 
   useEffect(() => {
-    cargarTodo();
-  }, []);
+    if (puedeVerModulo) cargarTodo();
+  }, [puedeVerModulo]);
 
-  if (!usuario?.es_dueno) {
+  if (!puedeVerModulo) {
     return (
       <div className="troya-vacio">
         <h3>No tenés acceso a esta sección</h3>
-        <p>Costos y Precios es exclusivo del dueño.</p>
+        <p>Pedile al dueño que te habilite Costos y Precios desde el Panel de Accesos.</p>
       </div>
     );
   }
@@ -180,7 +183,7 @@ export default function CostosPreciosPage() {
 
   const listasPrecioSeleccionadas = listas.filter((l) => columnasPorLista[l.id]?.precio);
 
-  const totalColumnas = 6 + columnasActivas.length + 1;
+  const totalColumnas = 6 + columnasActivas.length + (puedeEditarModulo ? 1 : 0);
   const cantidadListasVisibles = Object.values(columnasPorLista).filter((c) => c.precio || c.completa || c.mp).length;
 
   function toggleColumna(listaId: string, tipo: 'precio' | 'completa' | 'mp') {
@@ -491,127 +494,130 @@ export default function CostosPreciosPage() {
       <div className="troya-header">
         <div>
           <h1>Costos y Precios</h1>
-          <p className="troya-subtitulo">{productos.length} productos · {cantidadListasVisibles} lista(s) visible(s)</p>
+          <p className="troya-subtitulo">{productos.length} productos · {cantidadListasVisibles} lista(s) visible(s){!puedeEditarModulo && ' · Solo lectura'}</p>
         </div>
       </div>
 
-      <div className="troya-panel" style={{ marginBottom: 14 }}>
-        <div className="troya-panel-body" style={{ borderTop: 'none', paddingTop: 16 }}>
-          <div className="troya-form">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
-              Valor hora-hombre general:
-              <input
-                className="troya-input"
-                style={{ flex: '0 0 140px' }}
-                type="number"
-                value={valorHoraGlobalEdit}
-                onChange={(e) => setValorHoraGlobalEdit(e.target.value)}
-              />
-            </label>
-            <button className="troya-btn" onClick={guardarValorHoraGlobal} disabled={guardandoValorHora}>
-              {guardandoValorHora ? 'Guardando...' : 'Guardar'}
-            </button>
+      {puedeEditarModulo && (
+        <>
+          <div className="troya-panel" style={{ marginBottom: 14 }}>
+            <div className="troya-panel-body" style={{ borderTop: 'none', paddingTop: 16 }}>
+              <div className="troya-form">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                  Valor hora-hombre general:
+                  <input
+                    className="troya-input"
+                    style={{ flex: '0 0 140px' }}
+                    type="number"
+                    value={valorHoraGlobalEdit}
+                    onChange={(e) => setValorHoraGlobalEdit(e.target.value)}
+                  />
+                </label>
+                <button className="troya-btn" onClick={guardarValorHoraGlobal} disabled={guardandoValorHora}>
+                  {guardandoValorHora ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+              <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
+                Valor actual guardado: ${valorHoraGlobal.toLocaleString('es-AR')}
+              </p>
+            </div>
           </div>
-          <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
-            Valor actual guardado: ${valorHoraGlobal.toLocaleString('es-AR')}
-          </p>
-        </div>
-      </div>
 
-      <div className="troya-panel" style={{ marginBottom: 14 }}>
-        <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
-          Configuración (listas y columnas)
-          <IconMas />
-        </button>
-        {panelConfigAbierto && (
-          <div className="troya-panel-body">
-            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Listas de precio</p>
-            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Tildá qué columnas mostrar por lista. Las listas con &ldquo;Precio&rdquo; tildado son las que se incluyen al exportar a Excel.
-            </p>
+          <div className="troya-panel" style={{ marginBottom: 14 }}>
+            <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
+              Configuración (listas y columnas)
+              <IconMas />
+            </button>
+            {panelConfigAbierto && (
+              <div className="troya-panel-body">
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Listas de precio</p>
+                <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
+                  Tildá qué columnas mostrar por lista. Las listas con &ldquo;Precio&rdquo; tildado son las que se incluyen al exportar a Excel.
+                </p>
 
-            {listas.length === 0 ? (
-              <p className="troya-subtitulo" style={{ marginBottom: 12 }}>Todavía no hay listas cargadas. Agregá la primera abajo.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                {listas.map((l) => (
-                  <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', background: 'var(--bg)', borderRadius: 10 }}>
-                    <input
-                      className="troya-input"
-                      style={{ flex: '1 1 140px', padding: '7px 10px', fontSize: 13 }}
-                      value={nombresEdit[l.id] ?? ''}
-                      onChange={(e) => setNombresEdit({ ...nombresEdit, [l.id]: e.target.value })}
-                      onBlur={(e) => guardarNombreLista(l.id, e.target.value)}
-                    />
-                    <input
-                      className="troya-input"
-                      style={{ width: 56, padding: '7px 8px', fontSize: 13 }}
-                      type="number"
-                      value={descuentosEdit[l.id] ?? ''}
-                      onChange={(e) => setDescuentosEdit({ ...descuentosEdit, [l.id]: e.target.value })}
-                      onBlur={(e) => guardarDescuentoLista(l.id, e.target.value)}
-                    />
-                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>%</span>
+                {listas.length === 0 ? (
+                  <p className="troya-subtitulo" style={{ marginBottom: 12 }}>Todavía no hay listas cargadas. Agregá la primera abajo.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    {listas.map((l) => (
+                      <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', background: 'var(--bg)', borderRadius: 10 }}>
+                        <input
+                          className="troya-input"
+                          style={{ flex: '1 1 140px', padding: '7px 10px', fontSize: 13 }}
+                          value={nombresEdit[l.id] ?? ''}
+                          onChange={(e) => setNombresEdit({ ...nombresEdit, [l.id]: e.target.value })}
+                          onBlur={(e) => guardarNombreLista(l.id, e.target.value)}
+                        />
+                        <input
+                          className="troya-input"
+                          style={{ width: 56, padding: '7px 8px', fontSize: 13 }}
+                          type="number"
+                          value={descuentosEdit[l.id] ?? ''}
+                          onChange={(e) => setDescuentosEdit({ ...descuentosEdit, [l.id]: e.target.value })}
+                          onBlur={(e) => guardarDescuentoLista(l.id, e.target.value)}
+                        />
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>%</span>
 
-                    <span style={{ width: 1, height: 20, background: 'var(--line)' }} />
+                        <span style={{ width: 1, height: 20, background: 'var(--line)' }} />
 
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
-                      <input type="checkbox" checked={columnasPorLista[l.id]?.precio ?? false} onChange={() => toggleColumna(l.id, 'precio')} />
-                      Precio
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
-                      <input type="checkbox" checked={columnasPorLista[l.id]?.completa ?? false} onChange={() => toggleColumna(l.id, 'completa')} />
-                      Rent. Compl.
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
-                      <input type="checkbox" checked={columnasPorLista[l.id]?.mp ?? false} onChange={() => toggleColumna(l.id, 'mp')} />
-                      Rent. MP
-                    </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                          <input type="checkbox" checked={columnasPorLista[l.id]?.precio ?? false} onChange={() => toggleColumna(l.id, 'precio')} />
+                          Precio
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                          <input type="checkbox" checked={columnasPorLista[l.id]?.completa ?? false} onChange={() => toggleColumna(l.id, 'completa')} />
+                          Rent. Compl.
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                          <input type="checkbox" checked={columnasPorLista[l.id]?.mp ?? false} onChange={() => toggleColumna(l.id, 'mp')} />
+                          Rent. MP
+                        </label>
 
-                    <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarLista(l)} title="Eliminar lista" style={{ width: 26, height: 26, marginLeft: 'auto' }}>
-                      <IconTacho />
-                    </button>
+                        <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarLista(l)} title="Eliminar lista" style={{ width: 26, height: 26, marginLeft: 'auto' }}>
+                          <IconTacho />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                <form onSubmit={crearLista} className="troya-form">
+                  <input className="troya-input" placeholder="Nombre de la nueva lista (ej: Lista B)" value={nombreListaNueva} onChange={(e) => setNombreListaNueva(e.target.value)} />
+                  <input className="troya-input" style={{ flex: '0 0 140px' }} type="number" placeholder="% descuento" value={descuentoListaNueva} onChange={(e) => setDescuentoListaNueva(e.target.value)} />
+                  <button type="submit" className="troya-btn">+ Agregar lista</button>
+                </form>
               </div>
             )}
-
-            <form onSubmit={crearLista} className="troya-form">
-              <input className="troya-input" placeholder="Nombre de la nueva lista (ej: Lista B)" value={nombreListaNueva} onChange={(e) => setNombreListaNueva(e.target.value)} />
-              <input className="troya-input" style={{ flex: '0 0 140px' }} type="number" placeholder="% descuento" value={descuentoListaNueva} onChange={(e) => setDescuentoListaNueva(e.target.value)} />
-              <button type="submit" className="troya-btn">+ Agregar lista</button>
-            </form>
           </div>
-        )}
-      </div>
 
-      <div className="troya-panel" style={{ marginBottom: 20 }}>
-        <button className={`troya-panel-toggle ${panelImportarAbierto ? 'abierto' : ''}`} onClick={() => setPanelImportarAbierto(!panelImportarAbierto)}>
-          Importar actualización desde Excel
-          <IconMas />
-        </button>
-        {panelImportarAbierto && (
-          <div className="troya-panel-body">
-            {/* INSTRUCTIVO (placa con diseño, incluye todo el texto de los pasos) */}
-            <div style={{ marginBottom: 16 }}>
-              <img
-                src="/instructivo/costos.png"
-                alt="Instructivo: cómo sacar el reporte de Control de Precios e importarlo"
-                style={{ width: '100%', maxWidth: 460, borderRadius: 10, border: '1px solid var(--line)', display: 'block' }}
-              />
-            </div>
+          <div className="troya-panel" style={{ marginBottom: 20 }}>
+            <button className={`troya-panel-toggle ${panelImportarAbierto ? 'abierto' : ''}`} onClick={() => setPanelImportarAbierto(!panelImportarAbierto)}>
+              Importar actualización desde Excel
+              <IconMas />
+            </button>
+            {panelImportarAbierto && (
+              <div className="troya-panel-body">
+                <div style={{ marginBottom: 16 }}>
+                  <img
+                    src="/instructivo/costos.png"
+                    alt="Instructivo: cómo sacar el reporte de Control de Precios e importarlo"
+                    style={{ width: '100%', maxWidth: 460, borderRadius: 10, border: '1px solid var(--line)', display: 'block' }}
+                  />
+                </div>
 
-            <div className="troya-form">
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
-                Fecha de esta actualización:
-                <input className="troya-input" style={{ flex: '0 0 160px' }} type="date" value={fechaImportacion} onChange={(e) => setFechaImportacion(e.target.value)} />
-              </label>
-            </div>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={procesarArchivo} disabled={importando} style={{ marginTop: 10 }} />
-            {importando && <p className="troya-subtitulo">Importando...</p>}
+                <div className="troya-form">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                    Fecha de esta actualización:
+                    <input className="troya-input" style={{ flex: '0 0 160px' }} type="date" value={fechaImportacion} onChange={(e) => setFechaImportacion(e.target.value)} />
+                  </label>
+                </div>
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={procesarArchivo} disabled={importando} style={{ marginTop: 10 }} />
+                {importando && <p className="troya-subtitulo">Importando...</p>}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
         <div className="troya-buscador" style={{ marginBottom: 0, flex: 1 }}>
@@ -629,32 +635,34 @@ export default function CostosPreciosPage() {
         </p>
       )}
 
-      <div className="troya-panel" style={{ marginBottom: 20 }}>
-        <button className={`troya-panel-toggle ${panelNuevoAbierto ? 'abierto' : ''}`} onClick={() => setPanelNuevoAbierto(!panelNuevoAbierto)}>
-          Nuevo producto
-          <IconMas />
-        </button>
-        {panelNuevoAbierto && (
-          <div className="troya-panel-body">
-            <form onSubmit={crearProducto} className="troya-form">
-              <input className="troya-input" placeholder="Nombre" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} required />
-              <input className="troya-input" placeholder="Código" value={codigoNuevo} onChange={(e) => setCodigoNuevo(e.target.value)} />
-              <select className="troya-input" value={categoriaNueva} onChange={(e) => setCategoriaNueva(e.target.value)}>
-                <option value="">Sin categoría</option>
-                {ORDEN_CATEGORIAS.map((c) => (<option key={c} value={c}>{c}</option>))}
-              </select>
-              <button type="submit" className="troya-btn">Crear</button>
-            </form>
-          </div>
-        )}
-      </div>
+      {puedeEditarModulo && (
+        <div className="troya-panel" style={{ marginBottom: 20 }}>
+          <button className={`troya-panel-toggle ${panelNuevoAbierto ? 'abierto' : ''}`} onClick={() => setPanelNuevoAbierto(!panelNuevoAbierto)}>
+            Nuevo producto
+            <IconMas />
+          </button>
+          {panelNuevoAbierto && (
+            <div className="troya-panel-body">
+              <form onSubmit={crearProducto} className="troya-form">
+                <input className="troya-input" placeholder="Nombre" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} required />
+                <input className="troya-input" placeholder="Código" value={codigoNuevo} onChange={(e) => setCodigoNuevo(e.target.value)} />
+                <select className="troya-input" value={categoriaNueva} onChange={(e) => setCategoriaNueva(e.target.value)}>
+                  <option value="">Sin categoría</option>
+                  {ORDEN_CATEGORIAS.map((c) => (<option key={c} value={c}>{c}</option>))}
+                </select>
+                <button type="submit" className="troya-btn">Crear</button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
 
       {cargando ? (
         <p className="troya-subtitulo">Cargando...</p>
       ) : productosOrdenados.length === 0 ? (
         <div className="troya-vacio">
           <h3>No hay productos</h3>
-          <p>Cargá uno manual o importá un Excel.</p>
+          <p>{puedeEditarModulo ? 'Cargá uno manual o importá un Excel.' : 'Todavía no hay productos cargados.'}</p>
         </div>
       ) : (
         <div className="troya-matriz-wrapper">
@@ -674,7 +682,7 @@ export default function CostosPreciosPage() {
                     {c.tipo === 'mp' && `MP ${c.lista.descuento_porcentaje}%`}
                   </th>
                 ))}
-                <th></th>
+                {puedeEditarModulo && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -686,7 +694,7 @@ export default function CostosPreciosPage() {
                     </td>
                   </tr>
                   {grupo.items.map((p) => {
-                    if (editandoId === p.id) {
+                    if (puedeEditarModulo && editandoId === p.id) {
                       return (
                         <tr key={p.id}>
                           <td colSpan={totalColumnas} style={{ background: 'var(--bg)' }}>
@@ -732,19 +740,21 @@ export default function CostosPreciosPage() {
                             const rentMP = precioVenta > 0 ? ((precioVenta - (p.costo_materia_prima ?? 0)) / precioVenta) * 100 : 0;
                             return <td key={c.lista.id + c.tipo + idx}>{badgeRentabilidad(rentMP)}</td>;
                           })}
-                          <td>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial" style={{ width: 26, height: 26 }}>
-                                <IconHistorial />
-                              </button>
-                              <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar" style={{ width: 26, height: 26 }}>
-                                <IconLapiz />
-                              </button>
-                              <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar" style={{ width: 26, height: 26 }}>
-                                <IconTacho />
-                              </button>
-                            </div>
-                          </td>
+                          {puedeEditarModulo && (
+                            <td>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button className="troya-icon-btn" onClick={() => verHistorial(p.id)} title="Ver historial" style={{ width: 26, height: 26 }}>
+                                  <IconHistorial />
+                                </button>
+                                <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar" style={{ width: 26, height: 26 }}>
+                                  <IconLapiz />
+                                </button>
+                                <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarProducto(p)} title="Eliminar" style={{ width: 26, height: 26 }}>
+                                  <IconTacho />
+                                </button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                         {historialAbiertoId === p.id && (
                           <tr key={p.id + '-hist'}>

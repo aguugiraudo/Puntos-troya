@@ -4,22 +4,14 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 
 const MODULOS = [
-  { href: '/comercial/costos-precios', nombre: 'Costos y Precios', descripcion: 'Rentabilidad por lista e historial de actualizaciones', icon: IconCostos },
-  { href: '/comercial/promos', nombre: 'Promos', descripcion: 'Armá combos y ofertas, con rentabilidad al instante', icon: IconPromos },
-  { href: '/comercial/stock', nombre: 'Stock', descripcion: 'Cuánto hay y cuánto vale, por depósito', icon: IconStock },
+  { href: '/comercial/costos-precios', nombre: 'Costos y Precios', descripcion: 'Rentabilidad por lista e historial de actualizaciones', icon: IconCostos, modulo: 'costos_precios' },
+  { href: '/comercial/promos', nombre: 'Promos', descripcion: 'Armá combos y ofertas, con rentabilidad al instante', icon: IconPromos, modulo: 'promos' },
+  { href: '/comercial/stock', nombre: 'Stock', descripcion: 'Cuánto hay y cuánto vale, por depósito', icon: IconStock, modulo: 'stock' },
 ];
 
 export default function ComercialPage() {
-  const { usuario } = useAuth();
-
-  if (!usuario?.es_dueno) {
-    return (
-      <div className="troya-vacio">
-        <h3>No tenés acceso a esta sección</h3>
-        <p>Comercial es exclusivo del dueño.</p>
-      </div>
-    );
-  }
+  const { puedeVer } = useAuth();
+  const modulosVisibles = MODULOS.filter((m) => puedeVer(m.modulo));
 
   return (
     <div>
@@ -30,20 +22,27 @@ export default function ComercialPage() {
         </div>
       </div>
 
-      <div className="troya-hub-grid">
-        {MODULOS.map((m) => {
-          const Icon = m.icon;
-          return (
-            <Link key={m.href} href={m.href} className="troya-hub-card">
-              <div className="troya-hub-card-icono"><Icon /></div>
-              <div className="troya-hub-card-texto">
-                <h3>{m.nombre}</h3>
-                <p>{m.descripcion}</p>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      {modulosVisibles.length === 0 ? (
+        <div className="troya-vacio">
+          <h3>No tenés acceso a ningún módulo de Comercial</h3>
+          <p>Pedile al dueño que te habilite alguno desde el Panel de Accesos.</p>
+        </div>
+      ) : (
+        <div className="troya-hub-grid">
+          {modulosVisibles.map((m) => {
+            const Icon = m.icon;
+            return (
+              <Link key={m.href} href={m.href} className="troya-hub-card">
+                <div className="troya-hub-card-icono"><Icon /></div>
+                <div className="troya-hub-card-texto">
+                  <h3>{m.nombre}</h3>
+                  <p>{m.descripcion}</p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

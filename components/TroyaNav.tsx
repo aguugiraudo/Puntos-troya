@@ -6,12 +6,12 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 
 const ITEMS = [
-  { href: '/', label: 'Inicio', icon: IconInicio, modulo: null as string | null, soloDueno: false },
-  { href: '/clientes', label: 'Clientes', icon: IconClientes, modulo: 'clientes', soloDueno: false },
-  { href: '/activos', label: 'Activos', icon: IconActivos, modulo: 'activos', soloDueno: false },
-  { href: '/prospectos', label: 'Prospectos', icon: IconProspectos, modulo: 'prospectos', soloDueno: false },
-  { href: '/comercial', label: 'Comercial', icon: IconComercial, modulo: null, soloDueno: true },
-  { href: '/mas', label: 'Más', icon: IconMas, modulo: null, soloDueno: false },
+  { href: '/', label: 'Inicio', icon: IconInicio, modulos: null as string[] | null, soloDueno: false },
+  { href: '/clientes', label: 'Clientes', icon: IconClientes, modulos: ['clientes'], soloDueno: false },
+  { href: '/activos', label: 'Activos', icon: IconActivos, modulos: ['activos'], soloDueno: false },
+  { href: '/prospectos', label: 'Prospectos', icon: IconProspectos, modulos: ['prospectos'], soloDueno: false },
+  { href: '/comercial', label: 'Comercial', icon: IconComercial, modulos: ['costos_precios', 'promos', 'stock'], soloDueno: false },
+  { href: '/mas', label: 'Más', icon: IconMas, modulos: null, soloDueno: false },
 ];
 
 export default function TroyaNav() {
@@ -20,7 +20,7 @@ export default function TroyaNav() {
 
   const itemsVisibles = ITEMS.filter((item) => {
     if (item.soloDueno) return usuario?.es_dueno;
-    if (item.modulo) return puedeVer(item.modulo);
+    if (item.modulos) return item.modulos.some((m) => puedeVer(m));
     return true;
   });
 

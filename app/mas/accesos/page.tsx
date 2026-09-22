@@ -8,6 +8,10 @@ type Usuario = { id: string; auth_user_id: string; nombre: string; email: string
 type Modulo = { id: string; codigo: string; nombre: string };
 type Nivel = 'sin_acceso' | 'lectura' | 'edicion';
 
+// Solo el Panel de Accesos en sí queda siempre exclusivo del dueño (no delegable).
+// Todo lo demás, incluido Comercial, se maneja 100% desde esta matriz.
+const MODULOS_OCULTOS_EN_MATRIZ = ['accesos'];
+
 export default function AccesosPage() {
   const { usuario } = useAuth();
 
@@ -56,6 +60,8 @@ export default function AccesosPage() {
       </div>
     );
   }
+
+  const modulosMatriz = modulos.filter((m) => !MODULOS_OCULTOS_EN_MATRIZ.includes(m.codigo));
 
   async function crearUsuario(e: React.FormEvent) {
     e.preventDefault();
@@ -163,7 +169,6 @@ export default function AccesosPage() {
         )}
       </div>
 
-      {/* USUARIOS */}
       <div className="troya-seccion">
         <div className="troya-seccion-titulo">Usuarios</div>
 
@@ -191,10 +196,12 @@ export default function AccesosPage() {
         )}
       </div>
 
-      {/* MATRIZ DE PERMISOS */}
       {usuariosNoDueno.length > 0 && (
         <div className="troya-seccion">
           <div className="troya-seccion-titulo">Matriz de permisos</div>
+          <p className="troya-subtitulo" style={{ marginTop: -8, marginBottom: 12 }}>
+            Todo (incluido Comercial: Costos y Precios, Promos, Stock) se maneja desde acá. Solo este Panel de Accesos queda siempre exclusivo del dueño.
+          </p>
 
           <div className="troya-matriz-wrapper">
             <table className="troya-matriz-tabla">
@@ -207,7 +214,7 @@ export default function AccesosPage() {
                 </tr>
               </thead>
               <tbody>
-                {modulos.map((m) => (
+                {modulosMatriz.map((m) => (
                   <tr key={m.id}>
                     <td>{m.nombre}</td>
                     {usuariosNoDueno.map((u) => {
