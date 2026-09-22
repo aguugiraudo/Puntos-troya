@@ -70,6 +70,7 @@ export default function CostosPreciosPage() {
   const [guardandoValorHora, setGuardandoValorHora] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
+  const [exportando, setExportando] = useState(false);
 
   const [panelConfigAbierto, setPanelConfigAbierto] = useState(false);
 
@@ -176,6 +177,8 @@ export default function CostosPreciosPage() {
     if (cols.completa) columnasActivas.push({ lista: l, tipo: 'completa' });
     if (cols.mp) columnasActivas.push({ lista: l, tipo: 'mp' });
   });
+
+  const listasPrecioSeleccionadas = listas.filter((l) => columnasPorLista[l.id]?.precio);
 
   const totalColumnas = 6 + columnasActivas.length + 1;
   const cantidadListasVisibles = Object.values(columnasPorLista).filter((c) => c.precio || c.completa || c.mp).length;
@@ -384,8 +387,6 @@ export default function CostosPreciosPage() {
 
           const existente = productos.find((p) => p.nombre.toLowerCase().trim() === nombre.toLowerCase());
 
-          // Si la columna vino en el Excel, se usa ese valor. Si NO vino, se conserva
-          // lo que el producto ya tenía cargado (en vez de pisarlo con 0/null).
           const costoMP = costoMPFila !== undefined ? Number(costoMPFila) || null : (existente?.costo_materia_prima ?? null);
           const horas = horasFila !== undefined ? Number(horasFila) || null : (existente?.horas_produccion ?? null);
           const valorHora = valorHoraFila !== undefined ? Number(valorHoraFila) || null : (existente?.valor_hora_hombre ?? null);
@@ -463,6 +464,44 @@ export default function CostosPreciosPage() {
     }
   }
 
+  async function exportarExcel() {
+    if (productosOrdenados.length === 0) {
+      alert('No hay productos para exportar.');
+      return;
+    }
+
+    setExportando(true);
+    try {
+      const XLSX = await import('xlsx');
+
+      const filasExport = productosOrdenados.map((p) => {
+        const fila: Record<string, any> = {
+          'Código': p.codigo ?? '',
+          'Producto': p.nombre,
+          'Precio Lista': p.precio_lista ?? 0,
+        };
+
+        listasPrecioSeleccionadas.forEach((l) => {
+          const precioVenta = (p.precio_lista ?? 0) * (1 - l.descuento_porcentaje / 100);
+          fila[l.nombre] = Math.round(precioVenta);
+        });
+
+        return fila;
+      });
+
+      const hoja = XLSX.utils.json_to_sheet(filasExport);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, 'Precios');
+
+      const fecha = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(libro, `precios-troya-${fecha}.xlsx`);
+    } catch (err: any) {
+      alert('Error al exportar: ' + err.message);
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <div>
       <div className="troya-header">
@@ -500,7 +539,7 @@ export default function CostosPreciosPage() {
 
             <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Listas de precio</p>
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Tildá qué columnas mostrar por lista: precio, rentabilidad completa y/o rentabilidad sobre materia prima.
+              Tildá qué columnas mostrar por lista: precio, rentabilidad completa y/o rentabilidad sobre materia prima. Las listas con "Precio" tildado son las que se incluyen al exportar a Excel.
             </p>
 
             {listas.length === 0 ? (
@@ -582,10 +621,21 @@ export default function CostosPreciosPage() {
         )}
       </div>
 
-      <div className="troya-buscador">
-        <IconBuscar />
-        <input type="text" placeholder="Buscar por nombre o código..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <div className="troya-buscador" style={{ marginBottom: 0, flex: 1 }}>
+          <IconBuscar />
+          <input type="text" placeholder="Buscar por nombre o código..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+        </div>
+        <button className="troya-btn troya-btn-secundario" onClick={exportarExcel} disabled={exportando} title="Descarga Código, Producto, Precio Lista y las listas tildadas en 'Precio'">
+          {exportando ? 'Exportando...' : '⬇ Exportar Excel'}
+        </button>
       </div>
+
+      {listasPrecioSeleccionadas.length === 0 && (
+        <p className="troya-subtitulo" style={{ marginTop: -8, marginBottom: 16 }}>
+          El Excel exportado va a traer solo Código, Producto y Precio Lista — si querés incluir el precio de una lista específica (ej: para el distribuidor), tildá "Precio" en esa lista dentro de "Configuración" antes de exportar.
+        </p>
+      )}
 
       <div className="troya-panel" style={{ marginBottom: 20 }}>
         <button className={`troya-panel-toggle ${panelNuevoAbierto ? 'abierto' : ''}`} onClick={() => setPanelNuevoAbierto(!panelNuevoAbierto)}>
