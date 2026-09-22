@@ -350,8 +350,8 @@ export default function CostosPreciosPage() {
     if (!file) return;
 
     setImportando(true);
+    const noEncontrados: string[] = [];
     const errores: string[] = [];
-    let creados = 0;
     let actualizados = 0;
 
     try {
@@ -372,67 +372,48 @@ export default function CostosPreciosPage() {
 
       for (let i = 0; i < filas.length; i++) {
         const fila = filas[i];
-        const nombreCrudo = buscarColumna(fila, ['producto', 'nombre', 'descripcion', 'descripción']);
-        if (!nombreCrudo) continue;
+        const codigoCrudo = buscarColumna(fila, ['codigo', 'código', 'cod']);
+        if (codigoCrudo === undefined || codigoCrudo === null || String(codigoCrudo).trim() === '') continue;
 
-        const nombre = String(nombreCrudo).trim();
+        const codigo = String(codigoCrudo).trim();
 
         try {
-          const codigoFila = buscarColumna(fila, ['codigo', 'código', 'cod']);
+          const existente = productos.find((p) => (p.codigo ?? '').trim().toLowerCase() === codigo.toLowerCase());
+
+          if (!existente) {
+            noEncontrados.push(codigo);
+            continue;
+          }
+
           const categoriaFila = buscarColumna(fila, ['categoria', 'categoría', 'rubro']);
           const costoMPFila = buscarColumna(fila, ['costo materia prima', 'materia prima', 'costo mp', 'reposicion_pesos', 'reposicion', 'reposición']);
           const horasFila = buscarColumna(fila, ['horas produccion', 'horas producción', 'horas', 'tiempo de produccion', 'tiempo de producción', 'm.o. en horas']);
           const valorHoraFila = buscarColumna(fila, ['valor hora hombre', 'valor hora', 'costo hora']);
           const precioListaFila = buscarColumna(fila, ['precio lista', 'precio', 'precio_l1', 'precio l1']);
 
-          const existente = productos.find((p) => p.nombre.toLowerCase().trim() === nombre.toLowerCase());
-
-          const costoMP = costoMPFila !== undefined ? Number(costoMPFila) || null : (existente?.costo_materia_prima ?? null);
-          const horas = horasFila !== undefined ? Number(horasFila) || null : (existente?.horas_produccion ?? null);
-          const valorHora = valorHoraFila !== undefined ? Number(valorHoraFila) || null : (existente?.valor_hora_hombre ?? null);
-          const precioLista = precioListaFila !== undefined ? Number(precioListaFila) || null : (existente?.precio_lista ?? null);
+          const costoMP = costoMPFila !== undefined ? Number(costoMPFila) || null : existente.costo_materia_prima;
+          const horas = horasFila !== undefined ? Number(horasFila) || null : existente.horas_produccion;
+          const valorHora = valorHoraFila !== undefined ? Number(valorHoraFila) || null : existente.valor_hora_hombre;
+          const precioLista = precioListaFila !== undefined ? Number(precioListaFila) || null : existente.precio_lista;
 
           const { manoObra, completo } = calcular(costoMP, horas, valorHora, precioLista);
 
-          let productoId: string;
+          const { error: errorUpdate } = await supabase.from('productos').update({
+            categoria: categoriaFila !== undefined ? String(categoriaFila) : existente.categoria,
+            costo_materia_prima: costoMP,
+            horas_produccion: horas,
+            valor_hora_hombre: valorHora,
+            costo_mano_obra: manoObra,
+            costo_completo: completo,
+            precio_lista: precioLista,
+            actualizado_en: new Date().toISOString(),
+          }).eq('id', existente.id);
 
-          if (existente) {
-            const { error: errorUpdate } = await supabase.from('productos').update({
-              codigo: codigoFila !== undefined ? String(codigoFila) : existente.codigo,
-              categoria: categoriaFila !== undefined ? String(categoriaFila) : existente.categoria,
-              costo_materia_prima: costoMP,
-              horas_produccion: horas,
-              valor_hora_hombre: valorHora,
-              costo_mano_obra: manoObra,
-              costo_completo: completo,
-              precio_lista: precioLista,
-              actualizado_en: new Date().toISOString(),
-            }).eq('id', existente.id);
-
-            if (errorUpdate) throw new Error(errorUpdate.message);
-            productoId = existente.id;
-            actualizados++;
-          } else {
-            const { data: nuevo, error: errorInsert } = await supabase.from('productos').insert({
-              nombre,
-              codigo: codigoFila !== undefined ? String(codigoFila) : null,
-              categoria: categoriaFila !== undefined ? String(categoriaFila) : null,
-              costo_materia_prima: costoMP,
-              horas_produccion: horas,
-              valor_hora_hombre: valorHora,
-              costo_mano_obra: manoObra,
-              costo_completo: completo,
-              precio_lista: precioLista,
-              actualizado_en: new Date().toISOString(),
-            }).select('id').single();
-
-            if (errorInsert || !nuevo) throw new Error(errorInsert?.message ?? 'No se pudo crear el producto');
-            productoId = nuevo.id;
-            creados++;
-          }
+          if (errorUpdate) throw new Error(errorUpdate.message);
+          actualizados++;
 
           const { error: errorHistorial } = await supabase.from('historial_costos').insert({
-            producto_id: productoId,
+            producto_id: existente.id,
             fecha: fechaImportacion,
             costo_materia_prima: costoMP,
             horas_produccion: horas,
@@ -443,14 +424,17 @@ export default function CostosPreciosPage() {
           });
           if (errorHistorial) throw new Error('Historial no guardado: ' + errorHistorial.message);
         } catch (errFila: any) {
-          errores.push(`Fila ${i + 2} ("${nombre}"): ${errFila.message}`);
+          errores.push(`Código ${codigo}: ${errFila.message}`);
         }
       }
 
-      let resumen = `Importación terminada: ${actualizados} actualizados, ${creados} nuevos.`;
+      let resumen = `Importación terminada: ${actualizados} productos actualizados.`;
+      if (noEncontrados.length > 0) {
+        resumen += `\n\n${noEncontrados.length} código(s) del Excel no están en tu catálogo comercial (se omitieron, no se crearon):\n` + noEncontrados.slice(0, 15).join(', ');
+        if (noEncontrados.length > 15) resumen += `... y ${noEncontrados.length - 15} más.`;
+      }
       if (errores.length > 0) {
-        resumen += `\n\n${errores.length} fila(s) con error:\n` + errores.slice(0, 10).join('\n');
-        if (errores.length > 10) resumen += `\n...y ${errores.length - 10} más.`;
+        resumen += `\n\n${errores.length} error(es):\n` + errores.slice(0, 10).join('\n');
       }
       alert(resumen);
 
@@ -512,34 +496,38 @@ export default function CostosPreciosPage() {
       </div>
 
       <div className="troya-panel" style={{ marginBottom: 14 }}>
+        <div className="troya-panel-body" style={{ borderTop: 'none', paddingTop: 16 }}>
+          <div className="troya-form">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+              Valor hora-hombre general:
+              <input
+                className="troya-input"
+                style={{ flex: '0 0 140px' }}
+                type="number"
+                value={valorHoraGlobalEdit}
+                onChange={(e) => setValorHoraGlobalEdit(e.target.value)}
+              />
+            </label>
+            <button className="troya-btn" onClick={guardarValorHoraGlobal} disabled={guardandoValorHora}>
+              {guardandoValorHora ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+          <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
+            Valor actual guardado: ${valorHoraGlobal.toLocaleString('es-AR')}
+          </p>
+        </div>
+      </div>
+
+      <div className="troya-panel" style={{ marginBottom: 14 }}>
         <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
-          Configuración (valor hora, listas y columnas)
+          Configuración (listas y columnas)
           <IconMas />
         </button>
         {panelConfigAbierto && (
           <div className="troya-panel-body">
-            <div className="troya-form" style={{ marginBottom: 4 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
-                Valor hora-hombre general:
-                <input
-                  className="troya-input"
-                  style={{ flex: '0 0 140px' }}
-                  type="number"
-                  value={valorHoraGlobalEdit}
-                  onChange={(e) => setValorHoraGlobalEdit(e.target.value)}
-                />
-              </label>
-              <button className="troya-btn" onClick={guardarValorHoraGlobal} disabled={guardandoValorHora}>
-                {guardandoValorHora ? 'Guardando...' : 'Guardar'}
-              </button>
-            </div>
-            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 16 }}>
-              Valor actual guardado: ${valorHoraGlobal.toLocaleString('es-AR')}
-            </p>
-
             <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Listas de precio</p>
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Tildá qué columnas mostrar por lista: precio, rentabilidad completa y/o rentabilidad sobre materia prima. Las listas con "Precio" tildado son las que se incluyen al exportar a Excel.
+              Tildá qué columnas mostrar por lista. Las listas con "Precio" tildado son las que se incluyen al exportar a Excel.
             </p>
 
             {listas.length === 0 ? (
@@ -604,10 +592,23 @@ export default function CostosPreciosPage() {
         </button>
         {panelImportarAbierto && (
           <div className="troya-panel-body">
+            {/* INSTRUCTIVO RESUMIDO */}
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, marginTop: 0, marginBottom: 8 }}>¿Dónde saco este reporte?</p>
+              <img
+                src="/instructivo/costos.png"
+                alt="Ruta en el sistema: Consultas externas → Mis Consultas Externas → Compras → Control de Precios"
+                style={{ width: '100%', maxWidth: 420, borderRadius: 8, border: '1px solid var(--line)', display: 'block', marginBottom: 10 }}
+              />
+              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+                <li>En el sistema: <strong>Consultas externas → Mis Consultas Externas → Compras → Control de Precios</strong>.</li>
+                <li>En la pestaña <strong>Columnas</strong>, tildá: CODIGO, DESCRIPCION, REPOSICION_PESOS (costo materia prima) y PRECIO_L1 (precio de lista). Sumá PROVEEDOR si vas a filtrar.</li>
+                <li>Generá la consulta, filtrá por proveedor si hace falta, y guardá como Excel.</li>
+              </ol>
+            </div>
+
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Reconoce: CODIGO, DESCRIPCION, Rubro, REPOSICION_PESOS (costo materia prima), PRECIO_L1 (precio de lista).
-              Si una columna no viene en el archivo, se conserva el valor que ya tenía cargado ese producto (no se borra).
-              Si el producto ya existe (por nombre), se actualiza; si no, se crea.
+              El sistema busca cada producto por código. Si un código no está en tu catálogo, se omite — no crea productos nuevos. Si no encuentra columnas de costo/precio, conserva lo que ya tenía cargado ese producto.
             </p>
             <div className="troya-form">
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>

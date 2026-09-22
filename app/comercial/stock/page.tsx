@@ -233,7 +233,7 @@ export default function StockPage() {
 
       let resumen = `Stock actualizado: ${actualizados} productos.`;
       if (noEncontrados.length > 0) {
-        resumen += `\n\n${noEncontrados.length} código(s) del Excel no están en tu catálogo comercial (se ignoraron, no se crearon):\n` + noEncontrados.slice(0, 15).join(', ');
+        resumen += `\n\n${noEncontrados.length} código(s) del Excel no están en tu catálogo comercial (se omitieron, no se crearon):\n` + noEncontrados.slice(0, 15).join(', ');
         if (noEncontrados.length > 15) resumen += `... y ${noEncontrados.length - 15} más.`;
       }
       alert(resumen);
@@ -314,6 +314,21 @@ export default function StockPage() {
         </button>
         {panelImportarAbierto && (
           <div className="troya-panel-body">
+            {/* INSTRUCTIVO RESUMIDO */}
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, marginTop: 0, marginBottom: 8 }}>¿Dónde saco este reporte?</p>
+              <img
+                src="/instructivo/stock.png"
+                alt="Ruta en el sistema: LIVE → Mis consultas → Saldos por PROVEEDOR"
+                style={{ width: '100%', maxWidth: 420, borderRadius: 8, border: '1px solid var(--line)', display: 'block', marginBottom: 10 }}
+              />
+              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+                <li>En el sistema: <strong>LIVE → Mis consultas → Saldos por PROVEEDOR</strong>.</li>
+                <li>Exportá a <strong>tabla dinámica</strong>. Filtrá <strong>Razón social</strong> (solo Metalúrgica) y <strong>Descripción depósito</strong> (Centro Logístico BsAs, Suc Rafaela, Tránsito Centro Logístico, Tránsito Rafaela).</li>
+                <li>Guardá el Excel, abrilo y hacé una <strong>copia de la hoja "Análisis" en una hoja nueva</strong> (clic derecho en la pestaña → Mover o copiar → Crear una copia). Esa hoja es la que subís acá.</li>
+              </ol>
+            </div>
+
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
               Reconoce columnas de Código, Descripción, Centro Logístico, Rafaela, tránsitos y Total general. Solo actualiza productos que ya existen en tu catálogo comercial (por código) — no crea productos nuevos.
             </p>
