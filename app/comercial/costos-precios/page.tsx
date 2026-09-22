@@ -527,7 +527,7 @@ export default function CostosPreciosPage() {
           <div className="troya-panel-body">
             <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Listas de precio</p>
             <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              Tildá qué columnas mostrar por lista. Las listas con "Precio" tildado son las que se incluyen al exportar a Excel.
+              Tildá qué columnas mostrar por lista. Las listas con &ldquo;Precio&rdquo; tildado son las que se incluyen al exportar a Excel.
             </p>
 
             {listas.length === 0 ? (
@@ -592,24 +592,15 @@ export default function CostosPreciosPage() {
         </button>
         {panelImportarAbierto && (
           <div className="troya-panel-body">
-            {/* INSTRUCTIVO RESUMIDO */}
-            <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, marginTop: 0, marginBottom: 8 }}>¿Dónde saco este reporte?</p>
+            {/* INSTRUCTIVO (placa con diseño, incluye todo el texto de los pasos) */}
+            <div style={{ marginBottom: 16 }}>
               <img
                 src="/instructivo/costos.png"
-                alt="Ruta en el sistema: Consultas externas → Mis Consultas Externas → Compras → Control de Precios"
-                style={{ width: '100%', maxWidth: 420, borderRadius: 8, border: '1px solid var(--line)', display: 'block', marginBottom: 10 }}
+                alt="Instructivo: cómo sacar el reporte de Control de Precios e importarlo"
+                style={{ width: '100%', maxWidth: 460, borderRadius: 10, border: '1px solid var(--line)', display: 'block' }}
               />
-              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
-                <li>En el sistema: <strong>Consultas externas → Mis Consultas Externas → Compras → Control de Precios</strong>.</li>
-                <li>En la pestaña <strong>Columnas</strong>, tildá: CODIGO, DESCRIPCION, REPOSICION_PESOS (costo materia prima) y PRECIO_L1 (precio de lista). Sumá PROVEEDOR si vas a filtrar.</li>
-                <li>Generá la consulta, filtrá por proveedor si hace falta, y guardá como Excel.</li>
-              </ol>
             </div>
 
-            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 10 }}>
-              El sistema busca cada producto por código. Si un código no está en tu catálogo, se omite — no crea productos nuevos. Si no encuentra columnas de costo/precio, conserva lo que ya tenía cargado ese producto.
-            </p>
             <div className="troya-form">
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
                 Fecha de esta actualización:
@@ -627,14 +618,14 @@ export default function CostosPreciosPage() {
           <IconBuscar />
           <input type="text" placeholder="Buscar por nombre o código..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
         </div>
-        <button className="troya-btn troya-btn-secundario" onClick={exportarExcel} disabled={exportando} title="Descarga Código, Producto, Precio Lista y las listas tildadas en 'Precio'">
+        <button className="troya-btn troya-btn-secundario" onClick={exportarExcel} disabled={exportando} title="Descarga Código, Producto, Precio Lista y las listas tildadas en Precio">
           {exportando ? 'Exportando...' : '⬇ Exportar Excel'}
         </button>
       </div>
 
       {listasPrecioSeleccionadas.length === 0 && (
         <p className="troya-subtitulo" style={{ marginTop: -8, marginBottom: 16 }}>
-          El Excel exportado va a traer solo Código, Producto y Precio Lista — si querés incluir el precio de una lista específica (ej: para el distribuidor), tildá "Precio" en esa lista dentro de "Configuración" antes de exportar.
+          El Excel exportado va a traer solo Código, Producto y Precio Lista — si querés incluir el precio de una lista específica (ej: para el distribuidor), tildá &ldquo;Precio&rdquo; en esa lista dentro de &ldquo;Configuración&rdquo; antes de exportar.
         </p>
       )}
 
