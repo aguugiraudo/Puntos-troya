@@ -32,18 +32,19 @@ type CotizacionItem = {
   precio_unitario: number;
   subtotal: number;
   costo_unitario: number | null;
+  costo_materia_prima_unitario: number | null;
 };
 
 function money(v: number | null | undefined) {
   return `$${(v ?? 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 }
 
-function badgeRentabilidad(rentabilidad: number) {
+function badgeRentabilidad(rentabilidad: number, etiqueta: string) {
   const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? '#8A6D00' : '#2E7D32';
   const bg = rentabilidad < 0 ? 'var(--tint-red)' : rentabilidad < 15 ? '#FFF3CD' : '#E3F3E4';
   return (
-    <span style={{ background: bg, color, padding: '3px 10px', borderRadius: 8, fontWeight: 700, fontSize: 13 }}>
-      {rentabilidad.toFixed(1)}%
+    <span style={{ background: bg, color, padding: '3px 9px', borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>
+      {etiqueta} {rentabilidad.toFixed(1)}%
     </span>
   );
 }
@@ -62,7 +63,8 @@ export default function CotizadorPage() {
   const [itemsPorCotizacion, setItemsPorCotizacion] = useState<Record<string, CotizacionItem[]>>({});
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
-  const [baseRentabilidad, setBaseRentabilidad] = useState<'completo' | 'materia_prima'>('completo');
+  const [mostrarRentCompleta, setMostrarRentCompleta] = useState(true);
+  const [mostrarRentMP, setMostrarRentMP] = useState(true);
 
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [nombreClienteForm, setNombreClienteForm] = useState('');
@@ -123,10 +125,8 @@ export default function CotizadorPage() {
     return lista * (1 - (item.descuento_porcentaje || 0) / 100);
   }
 
-  function costoUnitario(item: ItemForm) {
-    const prod = datosProducto(item.producto_id);
-    if (!prod) return 0;
-    return (baseRentabilidad === 'completo' ? prod.costo_completo : prod.costo_materia_prima) ?? 0;
+  function rentabilidadLinea(precioUnit: number, costoUnit: number) {
+    return precioUnit > 0 ? ((precioUnit - costoUnit) / precioUnit) * 100 : 0;
   }
 
   function actualizarItem(clientId: string, cambios: Partial<ItemForm>) {
@@ -150,8 +150,10 @@ export default function CotizadorPage() {
 
   const itemsValidos = itemsForm.filter((it) => it.producto_id);
   const totalPrecioForm = itemsValidos.reduce((acc, it) => acc + precioUnitario(it) * (it.cantidad || 0), 0);
-  const totalCostoForm = itemsValidos.reduce((acc, it) => acc + costoUnitario(it) * (it.cantidad || 0), 0);
-  const rentabilidadForm = totalPrecioForm > 0 ? ((totalPrecioForm - totalCostoForm) / totalPrecioForm) * 100 : 0;
+  const totalCostoCompletoForm = itemsValidos.reduce((acc, it) => acc + (datosProducto(it.producto_id)?.costo_completo ?? 0) * (it.cantidad || 0), 0);
+  const totalCostoMPForm = itemsValidos.reduce((acc, it) => acc + (datosProducto(it.producto_id)?.costo_materia_prima ?? 0) * (it.cantidad || 0), 0);
+  const rentCompletaForm = rentabilidadLinea(totalPrecioForm, totalCostoCompletoForm);
+  const rentMPForm = rentabilidadLinea(totalPrecioForm, totalCostoMPForm);
 
   async function guardarCotizacion(e: React.FormEvent) {
     e.preventDefault();
@@ -172,15 +174,17 @@ export default function CotizadorPage() {
 
       const filas = itemsValidos.map((it) => {
         const prod = datosProducto(it.producto_id);
+        const precioUnit = precioUnitario(it);
         return {
           cotizacion_id: nueva.id,
           producto_id: it.producto_id,
           nombre_producto: prod?.nombre ?? '',
           cantidad: it.cantidad || 1,
           descuento_porcentaje: it.descuento_porcentaje || 0,
-          precio_unitario: precioUnitario(it),
-          subtotal: precioUnitario(it) * (it.cantidad || 1),
-          costo_unitario: costoUnitario(it),
+          precio_unitario: precioUnit,
+          subtotal: precioUnit * (it.cantidad || 1),
+          costo_unitario: prod?.costo_completo ?? 0,
+          costo_materia_prima_unitario: prod?.costo_materia_prima ?? 0,
         };
       });
 
@@ -234,21 +238,15 @@ export default function CotizadorPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        <button
-          className="troya-btn"
-          style={baseRentabilidad === 'completo' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
-          onClick={() => setBaseRentabilidad('completo')}
-        >
-          Rent. s/ costo completo
-        </button>
-        <button
-          className="troya-btn"
-          style={baseRentabilidad === 'materia_prima' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
-          onClick={() => setBaseRentabilidad('materia_prima')}
-        >
-          Rent. s/ materia prima
-        </button>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5 }}>
+          <input type="checkbox" checked={mostrarRentCompleta} onChange={(e) => setMostrarRentCompleta(e.target.checked)} />
+          Rentabilidad s/ costo completo
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5 }}>
+          <input type="checkbox" checked={mostrarRentMP} onChange={(e) => setMostrarRentMP(e.target.checked)} />
+          Rentabilidad s/ materia prima
+        </label>
       </div>
 
       {puedeEditarModulo && (
@@ -270,6 +268,12 @@ export default function CotizadorPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {itemsForm.map((it) => {
                     const prod = datosProducto(it.producto_id);
+                    const precioUnit = precioUnitario(it);
+                    const costoCompleto = prod?.costo_completo ?? 0;
+                    const costoMP = prod?.costo_materia_prima ?? 0;
+                    const rentCompleta = rentabilidadLinea(precioUnit, costoCompleto);
+                    const rentMP = rentabilidadLinea(precioUnit, costoMP);
+
                     return (
                       <div key={it.clientId} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
                         <div className="troya-form" style={{ paddingTop: 0 }}>
@@ -300,9 +304,15 @@ export default function CotizadorPage() {
                           </button>
                         </div>
                         {prod && (
-                          <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
-                            Precio lista: {money(prod.precio_lista)} · Con descuento: {money(precioUnitario(it))} c/u · Subtotal: {money(precioUnitario(it) * (it.cantidad || 0))}
-                          </p>
+                          <>
+                            <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 6 }}>
+                              Precio lista: {money(prod.precio_lista)} · Con descuento: {money(precioUnit)} c/u · Subtotal: {money(precioUnit * (it.cantidad || 0))}
+                            </p>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {mostrarRentCompleta && badgeRentabilidad(rentCompleta, 'Compl.')}
+                              {mostrarRentMP && badgeRentabilidad(rentMP, 'MP')}
+                            </div>
+                          </>
                         )}
                       </div>
                     );
@@ -320,7 +330,10 @@ export default function CotizadorPage() {
                   </div>
                   <div>
                     <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Rentabilidad del negocio</p>
-                    <div style={{ marginTop: 2 }}>{badgeRentabilidad(rentabilidadForm)}</div>
+                    <div style={{ marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {mostrarRentCompleta && badgeRentabilidad(rentCompletaForm, 'Compl.')}
+                      {mostrarRentMP && badgeRentabilidad(rentMPForm, 'MP')}
+                    </div>
                   </div>
                 </div>
 
@@ -351,8 +364,10 @@ export default function CotizadorPage() {
           {cotizacionesFiltradas.map((c) => {
             const items = itemsPorCotizacion[c.id] ?? [];
             const totalPrecio = items.reduce((acc, it) => acc + Number(it.subtotal), 0);
-            const totalCosto = items.reduce((acc, it) => acc + Number(it.costo_unitario ?? 0) * Number(it.cantidad), 0);
-            const rentabilidad = totalPrecio > 0 ? ((totalPrecio - totalCosto) / totalPrecio) * 100 : 0;
+            const totalCostoCompleto = items.reduce((acc, it) => acc + Number(it.costo_unitario ?? 0) * Number(it.cantidad), 0);
+            const totalCostoMP = items.reduce((acc, it) => acc + Number(it.costo_materia_prima_unitario ?? 0) * Number(it.cantidad), 0);
+            const rentCompleta = rentabilidadLinea(totalPrecio, totalCostoCompleto);
+            const rentMP = rentabilidadLinea(totalPrecio, totalCostoMP);
 
             return (
               <div key={c.id} className="troya-card troya-card-editando">
@@ -376,22 +391,32 @@ export default function CotizadorPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 4 }}>
-                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>Costo: {money(totalCosto)}</span>
-                  {badgeRentabilidad(rentabilidad)}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                  {mostrarRentCompleta && badgeRentabilidad(rentCompleta, 'Compl.')}
+                  {mostrarRentMP && badgeRentabilidad(rentMP, 'MP')}
                 </div>
 
                 {detalleAbiertoId === c.id && (
-                  <div style={{ marginTop: 10, width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {items.map((it) => (
-                      <div key={it.id} style={{ fontSize: 12.5, color: 'var(--muted)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{it.nombre_producto}</span>
-                        <span>x{it.cantidad}</span>
-                        <span>{it.descuento_porcentaje}% desc.</span>
-                        <span>{money(it.precio_unitario)} c/u</span>
-                        <span style={{ fontWeight: 600 }}>= {money(it.subtotal)}</span>
-                      </div>
-                    ))}
+                  <div style={{ marginTop: 10, width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {items.map((it) => {
+                      const rentLineaCompleta = rentabilidadLinea(Number(it.precio_unitario), Number(it.costo_unitario ?? 0));
+                      const rentLineaMP = rentabilidadLinea(Number(it.precio_unitario), Number(it.costo_materia_prima_unitario ?? 0));
+                      return (
+                        <div key={it.id} style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+                          <div style={{ fontSize: 12.5, color: 'var(--muted)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{it.nombre_producto}</span>
+                            <span>x{it.cantidad}</span>
+                            <span>{it.descuento_porcentaje}% desc.</span>
+                            <span>{money(it.precio_unitario)} c/u</span>
+                            <span style={{ fontWeight: 600 }}>= {money(it.subtotal)}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                            {mostrarRentCompleta && badgeRentabilidad(rentLineaCompleta, 'Compl.')}
+                            {mostrarRentMP && badgeRentabilidad(rentLineaMP, 'MP')}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
