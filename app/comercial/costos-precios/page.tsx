@@ -143,7 +143,7 @@ export default function CostosPreciosPage() {
     return (
       <div className="troya-vacio">
         <h3>No tenés acceso a esta sección</h3>
-        <p>Pedile al dueño que te habilite Costos y Precios desde el Panel de Accesos.</p>
+        <p>Pedile al administrador que te habilite Costos y Precios desde el Panel de Accesos.</p>
       </div>
     );
   }

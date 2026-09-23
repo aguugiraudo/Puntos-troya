@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 
+const MODULO = 'promos';
+
 type Producto = {
   id: string;
   nombre: string;
@@ -67,7 +69,9 @@ function nuevoItem(): PromoItem {
 }
 
 export default function PromosPage() {
-  const { usuario } = useAuth();
+  const { puedeVer, puedeEditar } = useAuth();
+  const puedeVerModulo = puedeVer(MODULO);
+  const puedeEditarModulo = puedeEditar(MODULO);
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
@@ -105,14 +109,14 @@ export default function PromosPage() {
   }
 
   useEffect(() => {
-    cargarTodo();
-  }, []);
+    if (puedeVerModulo) cargarTodo();
+  }, [puedeVerModulo]);
 
-  if (!usuario?.es_dueno) {
+  if (!puedeVerModulo) {
     return (
       <div className="troya-vacio">
         <h3>No tenés acceso a esta sección</h3>
-        <p>Promos es exclusivo del dueño.</p>
+        <p>Pedile al administrador que te habilite Promos desde el Panel de Accesos.</p>
       </div>
     );
   }
@@ -271,7 +275,7 @@ export default function PromosPage() {
       <div className="troya-header">
         <div>
           <h1>Promos</h1>
-          <p className="troya-subtitulo">{promos.length} promos armadas</p>
+          <p className="troya-subtitulo">{promos.length} promos armadas{!puedeEditarModulo && ' · Solo lectura'}</p>
         </div>
       </div>
 
@@ -292,127 +296,129 @@ export default function PromosPage() {
         </button>
       </div>
 
-      <div className="troya-panel" style={{ marginBottom: 20 }}>
-        <button className={`troya-panel-toggle ${panelAbierto ? 'abierto' : ''}`} onClick={() => (panelAbierto ? setPanelAbierto(false) : abrirNuevaPromo())}>
-          {editandoId ? 'Editando promo' : 'Nueva promo'}
-          <IconMas />
-        </button>
-        {panelAbierto && (
-          <div className="troya-panel-body">
-            <form onSubmit={guardarPromo}>
-              <div className="troya-form">
-                <input className="troya-input" placeholder="Nombre de la promo" value={nombreForm} onChange={(e) => setNombreForm(e.target.value)} required />
-                <select className="troya-input" style={{ flex: '0 0 220px' }} value={tipoForm} onChange={(e) => setTipoForm(e.target.value as any)}>
-                  <option value="combo_cerrado">Precio único de combo</option>
-                  <option value="por_unidad">Precio especial por unidad</option>
-                </select>
-                {tipoForm === 'combo_cerrado' && (
-                  <input className="troya-input" style={{ flex: '0 0 180px' }} type="number" placeholder="Precio del combo" value={precioComboForm} onChange={(e) => setPrecioComboForm(e.target.value)} />
-                )}
-              </div>
+      {puedeEditarModulo && (
+        <div className="troya-panel" style={{ marginBottom: 20 }}>
+          <button className={`troya-panel-toggle ${panelAbierto ? 'abierto' : ''}`} onClick={() => (panelAbierto ? setPanelAbierto(false) : abrirNuevaPromo())}>
+            {editandoId ? 'Editando promo' : 'Nueva promo'}
+            <IconMas />
+          </button>
+          {panelAbierto && (
+            <div className="troya-panel-body">
+              <form onSubmit={guardarPromo}>
+                <div className="troya-form">
+                  <input className="troya-input" placeholder="Nombre de la promo" value={nombreForm} onChange={(e) => setNombreForm(e.target.value)} required />
+                  <select className="troya-input" style={{ flex: '0 0 220px' }} value={tipoForm} onChange={(e) => setTipoForm(e.target.value as any)}>
+                    <option value="combo_cerrado">Precio único de combo</option>
+                    <option value="por_unidad">Precio especial por unidad</option>
+                  </select>
+                  {tipoForm === 'combo_cerrado' && (
+                    <input className="troya-input" style={{ flex: '0 0 180px' }} type="number" placeholder="Precio del combo" value={precioComboForm} onChange={(e) => setPrecioComboForm(e.target.value)} />
+                  )}
+                </div>
 
-              <p style={{ fontSize: 13, fontWeight: 600, margin: '16px 0 8px' }}>Ítems de la promo</p>
+                <p style={{ fontSize: 13, fontWeight: 600, margin: '16px 0 8px' }}>Ítems de la promo</p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {itemsForm.map((it) => (
-                  <div key={it.clientId} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
-                    <div className="troya-form" style={{ paddingTop: 0, marginBottom: 8 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                        <input
-                          type="checkbox"
-                          checked={it.es_regalo}
-                          onChange={(e) => actualizarItem(it.clientId, { es_regalo: e.target.checked, producto_id: e.target.checked ? null : it.producto_id })}
-                        />
-                        Ítem libre / regalo (no está en el catálogo)
-                      </label>
-                    </div>
-
-                    <div className="troya-form" style={{ paddingTop: 0 }}>
-                      {it.es_regalo ? (
-                        <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {itemsForm.map((it) => (
+                    <div key={it.clientId} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
+                      <div className="troya-form" style={{ paddingTop: 0, marginBottom: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                           <input
-                            className="troya-input"
-                            placeholder="Nombre del regalo/ítem"
-                            value={it.nombre_item}
-                            onChange={(e) => actualizarItem(it.clientId, { nombre_item: e.target.value })}
+                            type="checkbox"
+                            checked={it.es_regalo}
+                            onChange={(e) => actualizarItem(it.clientId, { es_regalo: e.target.checked, producto_id: e.target.checked ? null : it.producto_id })}
                           />
+                          Ítem libre / regalo (no está en el catálogo)
+                        </label>
+                      </div>
+
+                      <div className="troya-form" style={{ paddingTop: 0 }}>
+                        {it.es_regalo ? (
+                          <>
+                            <input
+                              className="troya-input"
+                              placeholder="Nombre del regalo/ítem"
+                              value={it.nombre_item}
+                              onChange={(e) => actualizarItem(it.clientId, { nombre_item: e.target.value })}
+                            />
+                            <input
+                              className="troya-input"
+                              style={{ flex: '0 0 160px' }}
+                              type="number"
+                              placeholder="Costo estimado (opcional)"
+                              value={it.costo_unitario_manual ?? ''}
+                              onChange={(e) => actualizarItem(it.clientId, { costo_unitario_manual: e.target.value ? Number(e.target.value) : null })}
+                            />
+                          </>
+                        ) : (
+                          <select className="troya-input" value={it.producto_id ?? ''} onChange={(e) => seleccionarProducto(it.clientId, e.target.value)}>
+                            <option value="">Elegir producto...</option>
+                            {productos.map((p) => (
+                              <option key={p.id} value={p.id}>{p.nombre}</option>
+                            ))}
+                          </select>
+                        )}
+
+                        <input
+                          className="troya-input"
+                          style={{ flex: '0 0 90px' }}
+                          type="number"
+                          placeholder="Cant."
+                          value={it.cantidad}
+                          onChange={(e) => actualizarItem(it.clientId, { cantidad: Number(e.target.value) || 1 })}
+                        />
+
+                        {tipoForm === 'por_unidad' && (
                           <input
                             className="troya-input"
                             style={{ flex: '0 0 160px' }}
                             type="number"
-                            placeholder="Costo estimado (opcional)"
-                            value={it.costo_unitario_manual ?? ''}
-                            onChange={(e) => actualizarItem(it.clientId, { costo_unitario_manual: e.target.value ? Number(e.target.value) : null })}
+                            placeholder="Precio promo x unidad"
+                            value={it.precio_unitario_promo ?? ''}
+                            onChange={(e) => actualizarItem(it.clientId, { precio_unitario_promo: e.target.value ? Number(e.target.value) : null })}
                           />
-                        </>
-                      ) : (
-                        <select className="troya-input" value={it.producto_id ?? ''} onChange={(e) => seleccionarProducto(it.clientId, e.target.value)}>
-                          <option value="">Elegir producto...</option>
-                          {productos.map((p) => (
-                            <option key={p.id} value={p.id}>{p.nombre}</option>
-                          ))}
-                        </select>
-                      )}
+                        )}
 
-                      <input
-                        className="troya-input"
-                        style={{ flex: '0 0 90px' }}
-                        type="number"
-                        placeholder="Cant."
-                        value={it.cantidad}
-                        onChange={(e) => actualizarItem(it.clientId, { cantidad: Number(e.target.value) || 1 })}
-                      />
+                        <button type="button" className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => quitarItem(it.clientId)} title="Quitar ítem">
+                          <IconTacho />
+                        </button>
+                      </div>
 
-                      {tipoForm === 'por_unidad' && (
-                        <input
-                          className="troya-input"
-                          style={{ flex: '0 0 160px' }}
-                          type="number"
-                          placeholder="Precio promo x unidad"
-                          value={it.precio_unitario_promo ?? ''}
-                          onChange={(e) => actualizarItem(it.clientId, { precio_unitario_promo: e.target.value ? Number(e.target.value) : null })}
-                        />
-                      )}
-
-                      <button type="button" className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => quitarItem(it.clientId)} title="Quitar ítem">
-                        <IconTacho />
-                      </button>
+                      <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
+                        Costo de este ítem: {money(costoUnitario(it))} x {it.cantidad || 0} = {money(costoUnitario(it) * (it.cantidad || 0))}
+                      </p>
                     </div>
+                  ))}
+                </div>
 
-                    <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
-                      Costo de este ítem: {money(costoUnitario(it))} x {it.cantidad || 0} = {money(costoUnitario(it) * (it.cantidad || 0))}
-                    </p>
+                <button type="button" className="troya-btn troya-btn-secundario" style={{ marginTop: 10 }} onClick={agregarItem}>
+                  + Agregar ítem
+                </button>
+
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 18, padding: '14px 16px', background: 'var(--tint-orange)', borderRadius: 10 }}>
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Costo total</p>
+                    <p style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{money(costoTotalForm)}</p>
                   </div>
-                ))}
-              </div>
-
-              <button type="button" className="troya-btn troya-btn-secundario" style={{ marginTop: 10 }} onClick={agregarItem}>
-                + Agregar ítem
-              </button>
-
-              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 18, padding: '14px 16px', background: 'var(--tint-orange)', borderRadius: 10 }}>
-                <div>
-                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Costo total</p>
-                  <p style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{money(costoTotalForm)}</p>
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Precio total</p>
+                    <p style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{money(precioTotalForm)}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Rentabilidad</p>
+                    <div style={{ marginTop: 2 }}>{badgeRentabilidad(rentabilidadForm)}</div>
+                  </div>
                 </div>
-                <div>
-                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Precio total</p>
-                  <p style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{money(precioTotalForm)}</p>
-                </div>
-                <div>
-                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Rentabilidad</p>
-                  <div style={{ marginTop: 2 }}>{badgeRentabilidad(rentabilidadForm)}</div>
-                </div>
-              </div>
 
-              <div className="troya-card-acciones" style={{ marginTop: 16 }}>
-                <button type="submit" className="troya-btn" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar promo'}</button>
-                <button type="button" className="troya-btn troya-btn-secundario" onClick={() => setPanelAbierto(false)}>Cancelar</button>
-              </div>
-            </form>
-          </div>
-        )}
-      </div>
+                <div className="troya-card-acciones" style={{ marginTop: 16 }}>
+                  <button type="submit" className="troya-btn" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar promo'}</button>
+                  <button type="button" className="troya-btn troya-btn-secundario" onClick={() => setPanelAbierto(false)}>Cancelar</button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="troya-buscador">
         <IconBuscar />
@@ -423,8 +429,8 @@ export default function PromosPage() {
         <p className="troya-subtitulo">Cargando...</p>
       ) : promosFiltradas.length === 0 ? (
         <div className="troya-vacio">
-          <h3>Todavía no armaste ninguna promo</h3>
-          <p>Usá &ldquo;Nueva promo&rdquo; arriba para crear la primera.</p>
+          <h3>Todavía no hay promos armadas</h3>
+          <p>{puedeEditarModulo ? 'Usá "Nueva promo" arriba para crear la primera.' : 'Todavía no hay promos cargadas.'}</p>
         </div>
       ) : (
         <div className="troya-lista">
@@ -455,17 +461,19 @@ export default function PromosPage() {
                       {promo.tipo === 'combo_cerrado' ? 'Precio de combo' : 'Precio por unidad'}: {money(precioTotal)}
                     </p>
                   </div>
-                  <div className="troya-card-acciones">
-                    <button className="troya-btn troya-btn-secundario" onClick={() => toggleActiva(promo)}>
-                      {promo.activa ? 'Desactivar' : 'Reactivar'}
-                    </button>
-                    <button className="troya-icon-btn" onClick={() => abrirEdicion(promo)} title="Editar">
-                      <IconLapiz />
-                    </button>
-                    <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPromo(promo)} title="Eliminar">
-                      <IconTacho />
-                    </button>
-                  </div>
+                  {puedeEditarModulo && (
+                    <div className="troya-card-acciones">
+                      <button className="troya-btn troya-btn-secundario" onClick={() => toggleActiva(promo)}>
+                        {promo.activa ? 'Desactivar' : 'Reactivar'}
+                      </button>
+                      <button className="troya-icon-btn" onClick={() => abrirEdicion(promo)} title="Editar">
+                        <IconLapiz />
+                      </button>
+                      <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPromo(promo)} title="Eliminar">
+                        <IconTacho />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 4 }}>

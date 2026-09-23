@@ -8,8 +8,6 @@ type Usuario = { id: string; auth_user_id: string; nombre: string; email: string
 type Modulo = { id: string; codigo: string; nombre: string };
 type Nivel = 'sin_acceso' | 'lectura' | 'edicion';
 
-// Solo el Panel de Accesos en sí queda siempre exclusivo del dueño (no delegable).
-// Todo lo demás, incluido Comercial, se maneja 100% desde esta matriz.
 const MODULOS_OCULTOS_EN_MATRIZ = ['accesos'];
 
 export default function AccesosPage() {
@@ -56,7 +54,7 @@ export default function AccesosPage() {
     return (
       <div className="troya-vacio">
         <h3>No tenés acceso a esta sección</h3>
-        <p>Solo el dueño puede administrar usuarios y permisos.</p>
+        <p>Solo el administrador puede administrar usuarios y permisos.</p>
       </div>
     );
   }
@@ -160,7 +158,7 @@ export default function AccesosPage() {
               <input className="troya-input" type="password" placeholder="Contraseña provisoria" value={passwordNuevo} onChange={(e) => setPasswordNuevo(e.target.value)} minLength={6} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
                 <input type="checkbox" checked={esDuenoNuevo} onChange={(e) => setEsDuenoNuevo(e.target.checked)} />
-                Acceso total (dueño)
+                Acceso total (administrador)
               </label>
               <button type="submit" className="troya-btn" disabled={creando}>{creando ? 'Procesando...' : 'Crear / vincular usuario'}</button>
             </form>
@@ -179,7 +177,7 @@ export default function AccesosPage() {
             {usuarios.map((u) => (
               <div key={u.id} className="troya-card">
                 <div className="troya-card-info">
-                  <h3>{u.nombre} {u.es_dueno ? '· Dueño' : ''}</h3>
+                  <h3>{u.nombre} {u.es_dueno ? '· Administrador' : ''}</h3>
                   <p>{u.email} · {u.activo ? 'Activo' : 'Desactivado'}</p>
                 </div>
                 <div className="troya-card-acciones">
@@ -200,7 +198,7 @@ export default function AccesosPage() {
         <div className="troya-seccion">
           <div className="troya-seccion-titulo">Matriz de permisos</div>
           <p className="troya-subtitulo" style={{ marginTop: -8, marginBottom: 12 }}>
-            Todo (incluido Comercial: Costos y Precios, Promos, Stock) se maneja desde acá. Solo este Panel de Accesos queda siempre exclusivo del dueño.
+            Todo (incluido Comercial: Costos y Precios, Promos, Stock) se maneja desde acá. Solo este Panel de Accesos queda siempre exclusivo del administrador.
           </p>
 
           <div className="troya-matriz-wrapper">

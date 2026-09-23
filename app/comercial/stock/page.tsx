@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 
 const ORDEN_CATEGORIAS = ['Fogoneros', 'Accesorios Fogoneros', 'Hornos', 'Estufas'];
+const MODULO = 'stock';
 
 type FilaStock = {
   id: string;
@@ -47,7 +48,9 @@ function normalizar(s: string) {
 }
 
 export default function StockPage() {
-  const { usuario } = useAuth();
+  const { puedeVer, puedeEditar } = useAuth();
+  const puedeVerModulo = puedeVer(MODULO);
+  const puedeEditarModulo = puedeEditar(MODULO);
 
   const [filas, setFilas] = useState<FilaStock[]>([]);
   const [productos, setProductos] = useState<ProductoLite[]>([]);
@@ -91,14 +94,14 @@ export default function StockPage() {
   }
 
   useEffect(() => {
-    cargarTodo();
-  }, []);
+    if (puedeVerModulo) cargarTodo();
+  }, [puedeVerModulo]);
 
-  if (!usuario?.es_dueno) {
+  if (!puedeVerModulo) {
     return (
       <div className="troya-vacio">
         <h3>No tenés acceso a esta sección</h3>
-        <p>Stock es exclusivo del dueño.</p>
+        <p>Pedile al administrador que te habilite Stock desde el Panel de Accesos.</p>
       </div>
     );
   }
@@ -253,81 +256,86 @@ export default function StockPage() {
       <div className="troya-header">
         <div>
           <h1>Stock</h1>
-          <p className="troya-subtitulo">{filas.length} productos con stock cargado · Valor total: {money(valorTotalGeneral)}</p>
+          <p className="troya-subtitulo">
+            {filas.length} productos con stock cargado · Valor total: {money(valorTotalGeneral)}{!puedeEditarModulo && ' · Solo lectura'}
+          </p>
         </div>
       </div>
 
-      <div className="troya-panel" style={{ marginBottom: 14 }}>
-        <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
-          Configuración (descuento y columnas por depósito)
-          <IconMas />
-        </button>
-        {panelConfigAbierto && (
-          <div className="troya-panel-body">
-            <div className="troya-form" style={{ marginBottom: 4 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
-                Descuento sobre precio de lista:
-                <input
-                  className="troya-input"
-                  style={{ flex: '0 0 100px' }}
-                  type="number"
-                  value={descuentoEdit}
-                  onChange={(e) => setDescuentoEdit(e.target.value)}
-                />
-                %
-              </label>
-              <button className="troya-btn" onClick={guardarDescuento} disabled={guardandoDescuento}>
-                {guardandoDescuento ? 'Guardando...' : 'Guardar'}
-              </button>
-            </div>
-            <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 16 }}>
-              Descuento actual guardado: {descuento}%. El precio unitario se calcula solo (precio de lista − este descuento).
-            </p>
+      {puedeEditarModulo && (
+        <>
+          <div className="troya-panel" style={{ marginBottom: 14 }}>
+            <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
+              Configuración (descuento y columnas por depósito)
+              <IconMas />
+            </button>
+            {panelConfigAbierto && (
+              <div className="troya-panel-body">
+                <div className="troya-form" style={{ marginBottom: 4 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                    Descuento sobre precio de lista:
+                    <input
+                      className="troya-input"
+                      style={{ flex: '0 0 100px' }}
+                      type="number"
+                      value={descuentoEdit}
+                      onChange={(e) => setDescuentoEdit(e.target.value)}
+                    />
+                    %
+                  </label>
+                  <button className="troya-btn" onClick={guardarDescuento} disabled={guardandoDescuento}>
+                    {guardandoDescuento ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+                <p className="troya-subtitulo" style={{ marginTop: 0, marginBottom: 16 }}>
+                  Descuento actual guardado: {descuento}%. El precio unitario se calcula solo (precio de lista − este descuento).
+                </p>
 
-            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Columnas por depósito a mostrar</p>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-                <input type="checkbox" checked={mostrarCentro} onChange={(e) => setMostrarCentro(e.target.checked)} />
-                Centro Logístico
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-                <input type="checkbox" checked={mostrarRafaela} onChange={(e) => setMostrarRafaela(e.target.checked)} />
-                Rafaela
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-                <input type="checkbox" checked={mostrarTransitoCentro} onChange={(e) => setMostrarTransitoCentro(e.target.checked)} />
-                Tránsito Centro Logístico
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-                <input type="checkbox" checked={mostrarTransitoRafaela} onChange={(e) => setMostrarTransitoRafaela(e.target.checked)} />
-                Tránsito Rafaela
-              </label>
-            </div>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Columnas por depósito a mostrar</p>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" checked={mostrarCentro} onChange={(e) => setMostrarCentro(e.target.checked)} />
+                    Centro Logístico
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" checked={mostrarRafaela} onChange={(e) => setMostrarRafaela(e.target.checked)} />
+                    Rafaela
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" checked={mostrarTransitoCentro} onChange={(e) => setMostrarTransitoCentro(e.target.checked)} />
+                    Tránsito Centro Logístico
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" checked={mostrarTransitoRafaela} onChange={(e) => setMostrarTransitoRafaela(e.target.checked)} />
+                    Tránsito Rafaela
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="troya-panel" style={{ marginBottom: 20 }}>
-        <button className={`troya-panel-toggle ${panelImportarAbierto ? 'abierto' : ''}`} onClick={() => setPanelImportarAbierto(!panelImportarAbierto)}>
-          Importar stock desde Excel
-          <IconMas />
-        </button>
-        {panelImportarAbierto && (
-          <div className="troya-panel-body">
-            {/* INSTRUCTIVO (placa con diseño, incluye todo el texto de los pasos) */}
-            <div style={{ marginBottom: 16 }}>
-              <img
-                src="/instructivo/stock.png"
-                alt="Instructivo: cómo sacar el reporte de Saldos por Proveedor e importarlo"
-                style={{ width: '100%', maxWidth: 460, borderRadius: 10, border: '1px solid var(--line)', display: 'block' }}
-              />
-            </div>
+          <div className="troya-panel" style={{ marginBottom: 20 }}>
+            <button className={`troya-panel-toggle ${panelImportarAbierto ? 'abierto' : ''}`} onClick={() => setPanelImportarAbierto(!panelImportarAbierto)}>
+              Importar stock desde Excel
+              <IconMas />
+            </button>
+            {panelImportarAbierto && (
+              <div className="troya-panel-body">
+                <div style={{ marginBottom: 16 }}>
+                  <img
+                    src="/instructivo/stock.png"
+                    alt="Instructivo: cómo sacar el reporte de Saldos por Proveedor e importarlo"
+                    style={{ width: '100%', maxWidth: 460, borderRadius: 10, border: '1px solid var(--line)', display: 'block' }}
+                  />
+                </div>
 
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={procesarArchivo} disabled={importando} />
-            {importando && <p className="troya-subtitulo">Importando...</p>}
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={procesarArchivo} disabled={importando} />
+                {importando && <p className="troya-subtitulo">Importando...</p>}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <div className="troya-buscador">
         <IconBuscar />
@@ -339,7 +347,7 @@ export default function StockPage() {
       ) : filasOrdenadas.length === 0 ? (
         <div className="troya-vacio">
           <h3>Todavía no hay stock cargado</h3>
-          <p>Importá tu Excel desde el panel de arriba.</p>
+          <p>{puedeEditarModulo ? 'Importá tu Excel desde el panel de arriba.' : 'Todavía no hay datos de stock disponibles.'}</p>
         </div>
       ) : (
         <div className="troya-matriz-wrapper">
