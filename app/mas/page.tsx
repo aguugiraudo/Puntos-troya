@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -77,7 +77,6 @@ type SaldoCliente = {
   puntosCanjeados: number;
   saldo: number;
   premiosCanjeados: string[];
-  compradoMes: number;
   avisadoEn: string | null;
 };
 
@@ -130,20 +129,6 @@ function badgeRent(v: number) {
   return (
     <span style={{ background: bg, color, padding: '2px 7px', borderRadius: 7, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>
       {v.toFixed(1)}%
-    </span>
-  );
-}
-
-function Pill({ texto, tipo }: { texto: string; tipo: 'ok' | 'alerta' | 'mal' | 'neutro' }) {
-  const estilos = {
-    ok: { bg: '#E3F3E4', color: '#2E7D32' },
-    alerta: { bg: '#FFF3CD', color: '#8A6D00' },
-    mal: { bg: 'var(--tint-red)', color: 'var(--red)' },
-    neutro: { bg: '#F1EDE8', color: 'var(--muted)' },
-  }[tipo];
-  return (
-    <span style={{ background: estilos.bg, color: estilos.color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-      {texto}
     </span>
   );
 }
@@ -328,13 +313,10 @@ export default function PuntosCanjePage() {
     const { data: comprasData } = await supabase
       .from('compras_mensuales')
       .select('punto_troya_id, monto, mes')
-      .in('mes', [mesPrevISO, mesSelISO]);
+      .eq('mes', mesPrevISO);
     const compradoPrev: Record<string, number> = {};
-    const compradoSel: Record<string, number> = {};
     (comprasData ?? []).forEach((c: any) => {
-      const m = String(c.mes).slice(0, 10);
-      if (m === mesPrevISO) compradoPrev[c.punto_troya_id] = (compradoPrev[c.punto_troya_id] ?? 0) + Number(c.monto);
-      if (m === mesSelISO) compradoSel[c.punto_troya_id] = (compradoSel[c.punto_troya_id] ?? 0) + Number(c.monto);
+      compradoPrev[c.punto_troya_id] = (compradoPrev[c.punto_troya_id] ?? 0) + Number(c.monto);
     });
 
     const { data: canjesData } = await supabase
@@ -368,7 +350,6 @@ export default function PuntosCanjePage() {
         puntosCanjeados,
         saldo: Math.max(0, puntosGanados - puntosCanjeados),
         premiosCanjeados: premios[p.id] ?? [],
-        compradoMes: compradoSel[p.id] ?? 0,
         avisadoEn: avisos[p.id] ?? null,
       };
     });
@@ -471,13 +452,13 @@ ${cargo.trim()}`;
     setTimeout(() => setCopiadoClave(''), 2000);
   }
 
-  async function copiarAsunto(s: SaldoCliente) {
+  async function copiarAsuntoGeneral() {
     const ok = await copiarAlPortapapeles(`¡Felicitaciones! Sus Beneficios Troya de ${cap(mesSelNombre)}`);
     if (!ok) {
       alert('No se pudo copiar automáticamente.');
       return;
     }
-    setCopiadoClave(`asunto-${s.punto_troya_id}`);
+    setCopiadoClave('asunto');
     setTimeout(() => setCopiadoClave(''), 2000);
   }
 
@@ -845,20 +826,12 @@ ${cargo.trim()}`;
 
   // ---------- Saldos: filtros y contadores ----------
   const conPuntos = saldos.filter((s) => s.puntosGanados > 0);
-  const cuentas = {
-    todos: saldos.length,
-    con_puntos: conPuntos.length,
-    sin_avisar: conPuntos.filter((s) => !s.avisadoEn).length,
-    sin_canjear: conPuntos.filter((s) => s.puntosCanjeados === 0).length,
-    canjearon: saldos.filter((s) => s.puntosCanjeados > 0).length,
-  };
-
-  const filtros: { id: Filtro; label: string }[] = [
-    { id: 'todos', label: `Todos (${cuentas.todos})` },
-    { id: 'con_puntos', label: `Con puntos (${cuentas.con_puntos})` },
-    { id: 'sin_avisar', label: `Sin avisar (${cuentas.sin_avisar})` },
-    { id: 'sin_canjear', label: `Con puntos sin canjear (${cuentas.sin_canjear})` },
-    { id: 'canjearon', label: `Ya canjearon (${cuentas.canjearon})` },
+  const filtros: { id: Filtro; label: string; n: number }[] = [
+    { id: 'todos', label: 'Todos', n: saldos.length },
+    { id: 'con_puntos', label: 'Con puntos', n: conPuntos.length },
+    { id: 'sin_avisar', label: 'Mail pendiente', n: conPuntos.filter((s) => !s.avisadoEn).length },
+    { id: 'sin_canjear', label: 'Sin canjear', n: conPuntos.filter((s) => s.puntosCanjeados === 0).length },
+    { id: 'canjearon', label: 'Canjearon', n: saldos.filter((s) => s.puntosCanjeados > 0).length },
   ];
 
   const saldosFiltrados = saldos
@@ -875,8 +848,6 @@ ${cargo.trim()}`;
       return [s.nombre, s.localidad, s.provincia].filter(Boolean).some((c) => c!.toLowerCase().includes(t));
     })
     .sort((a, b) => b.puntosGanados - a.puntosGanados || a.nombre.localeCompare(b.nombre));
-
-  const etiquetaMes = esMesActual ? 'este mes' : `en ${mesSelNombre}`;
 
   const pestanas: { id: Pestana; label: string }[] = [
     { id: 'premios', label: '1. Selección de premios' },
@@ -1043,8 +1014,8 @@ ${cargo.trim()}`;
                 </thead>
                 <tbody>
                   {grupos.map((g) => (
-                    <>
-                      <tr key={`cat-${g.categoria}`}>
+                    <Fragment key={`cat-${g.categoria}`}>
+                      <tr>
                         <td
                           colSpan={columnas.length}
                           style={{ background: 'var(--tint-orange)', color: 'var(--orange)', fontWeight: 700, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: 0.4 }}
@@ -1155,7 +1126,7 @@ ${cargo.trim()}`;
                           </tr>
                         );
                       })}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1256,38 +1227,50 @@ ${cargo.trim()}`;
             <strong>Puntos ganados con las compras de {mesPrevNombre}</strong>, canjeables durante {mesSelNombre}. No se acumulan.
           </p>
 
-          {/* FIRMA DEL MAIL */}
-          <div style={{ background: 'var(--tint-orange)', borderRadius: 12, padding: '12px 16px', margin: '0 0 14px' }}>
-            <p style={{ fontSize: 13.5, fontWeight: 700, margin: '0 0 8px' }}>Firma del mail: la completa quien envía y queda guardada en este navegador</p>
-            <div className="troya-form" style={{ paddingTop: 0 }}>
-              <input className="troya-input" style={{ flex: '1 1 220px' }} placeholder="Tu nombre y apellido" value={remitente} onChange={(e) => guardarFirma(e.target.value, cargo)} />
-              <input className="troya-input" style={{ flex: '1 1 220px' }} placeholder="Tu cargo (ej: Supervisor Comercial)" value={cargo} onChange={(e) => guardarFirma(remitente, e.target.value)} />
+          {/* FIRMA Y ASUNTO */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', background: 'var(--tint-orange)', borderRadius: 12, padding: '10px 14px', marginBottom: 6 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700 }}>Firma del mail</span>
+            <input className="troya-input" style={{ flex: '1 1 200px', padding: '8px 12px' }} placeholder="Nombre y apellido" value={remitente} onChange={(e) => guardarFirma(e.target.value, cargo)} />
+            <input className="troya-input" style={{ flex: '1 1 200px', padding: '8px 12px' }} placeholder="Cargo (ej: Supervisor Comercial)" value={cargo} onChange={(e) => guardarFirma(remitente, e.target.value)} />
+            <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 14px', fontSize: 13 }} onClick={copiarAsuntoGeneral}>
+              {copiadoClave === 'asunto' ? '¡Copiado!' : 'Copiar asunto'}
+            </button>
+          </div>
+          <p className="troya-subtitulo" style={{ margin: '0 0 16px' }}>La firma se guarda en este navegador. Adjuntá la placa del mes al mail.</p>
+
+          {/* FILTROS Y BUSCADOR */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+            <div style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+              {filtros.map((f, i) => (
+                <button
+                  key={f.id}
+                  onClick={() => setFiltro(f.id)}
+                  style={{
+                    padding: '9px 14px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    border: 'none',
+                    borderLeft: i === 0 ? 'none' : '1px solid var(--line)',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-body)',
+                    background: filtro === f.id ? 'var(--red)' : '#fff',
+                    color: filtro === f.id ? '#fff' : 'var(--ink)',
+                  }}
+                >
+                  {f.label}
+                  <span style={{ marginLeft: 6, fontWeight: 700, opacity: filtro === f.id ? 0.85 : 0.45 }}>{f.n}</span>
+                </button>
+              ))}
             </div>
-            <p className="troya-subtitulo" style={{ margin: '8px 0 0' }}>Recordá adjuntar al mail la placa de premios del mes (se descarga en el paso 2).</p>
-          </div>
-
-          {/* FILTROS */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-            {filtros.map((f) => (
-              <button
-                key={f.id}
-                className="troya-btn"
-                style={filtro === f.id ? { padding: '8px 14px', fontSize: 13 } : { padding: '8px 14px', fontSize: 13, background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
-                onClick={() => setFiltro(f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="troya-buscador">
-            <IconBuscar />
-            <input
-              type="text"
-              placeholder="Buscar por nombre, localidad o provincia..."
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-            />
+            <div className="troya-buscador" style={{ marginBottom: 0, flex: '1 1 220px', maxWidth: 360 }}>
+              <IconBuscar />
+              <input
+                type="text"
+                placeholder="Buscar cliente, localidad o provincia..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+              />
+            </div>
           </div>
 
           {cargandoSaldos ? (
@@ -1303,91 +1286,117 @@ ${cargo.trim()}`;
               <p>Probá con otro filtro o con otra búsqueda.</p>
             </div>
           ) : (
-            <div className="troya-lista">
-              {saldosFiltrados.map((s) =>
-                canjeandoId === s.punto_troya_id ? (
-                  <div key={s.punto_troya_id} className="troya-card troya-card-editando">
-                    <h3>{s.nombre}</h3>
-                    <p className="troya-subtitulo" style={{ margin: 0 }}>Saldo disponible: {s.saldo} puntos</p>
-                    <div className="troya-form">
-                      <select className="troya-input" value={itemSeleccionado} onChange={(e) => setItemSeleccionado(e.target.value)}>
-                        <option value="">Elegir premio del mes...</option>
-                        {premiosMes
-                          .filter((pm) => pm.puntos <= s.saldo)
-                          .map((pm) => (
-                            <option key={pm.id} value={pm.id}>{pm.nombre} — {pm.puntos} puntos</option>
-                          ))}
-                      </select>
-                    </div>
-                    <div className="troya-card-acciones">
-                      <button className="troya-btn" disabled={!itemSeleccionado} onClick={() => confirmarCanje(s.punto_troya_id)}>Confirmar canje</button>
-                      <button className="troya-btn troya-btn-secundario" onClick={() => setCanjeandoId(null)}>Cancelar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div key={s.punto_troya_id} className="troya-card" style={{ alignItems: 'flex-start' }}>
-                    <div className="troya-card-info">
-                      <h3>{s.nombre}</h3>
-                      <p>{[s.localidad, s.provincia].filter(Boolean).join(', ')}</p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="troya-saldo-puntos">{s.saldo}</div>
-                      <div className="troya-saldo-detalle">{s.puntosGanados} ganados con las compras de {mesPrevNombre} · {s.puntosCanjeados} canjeados</div>
-                    </div>
-
-                    <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', borderTop: '1px solid var(--line)', paddingTop: 10 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: editable ? 'pointer' : 'default' }}>
-                        <input
-                          type="checkbox"
-                          style={{ width: 18, height: 18 }}
-                          checked={!!s.avisadoEn}
-                          disabled={!editable}
-                          onChange={() => toggleAviso(s)}
-                        />
-                        {s.avisadoEn ? `Mail enviado el ${fechaCorta(s.avisadoEn)}` : 'Mail enviado'}
-                      </label>
-
-                      <button
-                        className="troya-btn troya-btn-secundario"
-                        style={{ padding: '7px 14px', fontSize: 13 }}
-                        onClick={() => copiarMail(s)}
-                        disabled={s.puntosGanados <= 0}
-                        title={s.puntosGanados <= 0 ? 'Este cliente no tiene puntos para informar' : 'Copia el mail completo para pegarlo en tu correo'}
-                      >
-                        {copiadoClave === `mail-${s.punto_troya_id}` ? '¡Copiado!' : 'Copiar mail'}
-                      </button>
-                      <button
-                        className="troya-btn troya-btn-secundario"
-                        style={{ padding: '7px 14px', fontSize: 13 }}
-                        onClick={() => copiarAsunto(s)}
-                        disabled={s.puntosGanados <= 0}
-                      >
-                        {copiadoClave === `asunto-${s.punto_troya_id}` ? '¡Copiado!' : 'Copiar asunto'}
-                      </button>
-
-                      {s.puntosCanjeados > 0 ? (
-                        <Pill tipo="ok" texto={`Canjeó: ${s.premiosCanjeados.join(', ')}`} />
-                      ) : s.puntosGanados > 0 ? (
-                        <Pill tipo="alerta" texto="Sin canjear" />
-                      ) : (
-                        <Pill tipo="neutro" texto="Sin puntos" />
+            <div className="troya-matriz-wrapper">
+              <table className="troya-matriz-tabla troya-matriz-tabla--compacta">
+                <colgroup>
+                  <col style={{ width: '38%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '24%' }} />
+                  <col style={{ width: '24%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Puntos ganados</th>
+                    <th>Mail enviado</th>
+                    <th>Puntos canjeados</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {saldosFiltrados.map((s) => (
+                    <Fragment key={s.punto_troya_id}>
+                      <tr>
+                        <td>
+                          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.nombre}>{s.nombre}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {[s.localidad, s.provincia].filter(Boolean).join(', ')}
+                          </div>
+                        </td>
+                        <td>
+                          <strong style={{ fontSize: 16, color: s.puntosGanados > 0 ? 'var(--ink)' : 'var(--muted)' }}>{s.puntosGanados}</strong>
+                        </td>
+                        <td>
+                          {s.puntosGanados > 0 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <input
+                                type="checkbox"
+                                style={{ width: 18, height: 18 }}
+                                checked={!!s.avisadoEn}
+                                disabled={!editable}
+                                onChange={() => toggleAviso(s)}
+                                title="Marcar mail como enviado"
+                              />
+                              <span style={{ fontSize: 12.5, color: s.avisadoEn ? '#2E7D32' : 'var(--muted)', fontWeight: 600 }}>
+                                {s.avisadoEn ? fechaCorta(s.avisadoEn) : 'Pendiente'}
+                              </span>
+                              <button
+                                className="troya-icon-btn"
+                                style={{ width: 28, height: 28 }}
+                                onClick={() => copiarMail(s)}
+                                title="Copiar mail"
+                              >
+                                {copiadoClave === `mail-${s.punto_troya_id}` ? <IconCheck /> : <IconCopiar />}
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          {s.puntosGanados > 0 || s.puntosCanjeados > 0 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              {s.puntosCanjeados > 0 ? (
+                                <div>
+                                  <strong style={{ fontSize: 15, color: '#2E7D32' }}>{s.puntosCanjeados}</strong>
+                                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.premiosCanjeados.join(', ')}</div>
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: 12.5, color: '#8A6D00', fontWeight: 600 }}>Pendiente</span>
+                              )}
+                              {editable && s.saldo > 0 && (
+                                <button
+                                  className="troya-btn troya-btn-secundario"
+                                  style={{ padding: '5px 10px', fontSize: 12 }}
+                                  onClick={() => empezarCanje(s.punto_troya_id)}
+                                >
+                                  Registrar
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                      {canjeandoId === s.punto_troya_id && (
+                        <tr>
+                          <td colSpan={4} style={{ background: 'var(--bg)' }}>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', padding: '6px 2px' }}>
+                              <span style={{ fontSize: 13 }}>
+                                Saldo de {s.nombre}: <strong>{s.saldo} puntos</strong>
+                              </span>
+                              <select className="troya-input" style={{ flex: '1 1 240px', padding: '8px 12px' }} value={itemSeleccionado} onChange={(e) => setItemSeleccionado(e.target.value)}>
+                                <option value="">Elegir premio del mes...</option>
+                                {premiosMes
+                                  .filter((pm) => pm.puntos <= s.saldo)
+                                  .map((pm) => (
+                                    <option key={pm.id} value={pm.id}>{pm.nombre} — {pm.puntos} puntos</option>
+                                  ))}
+                              </select>
+                              <button className="troya-btn" style={{ padding: '8px 16px', fontSize: 13 }} disabled={!itemSeleccionado} onClick={() => confirmarCanje(s.punto_troya_id)}>
+                                Confirmar canje
+                              </button>
+                              <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 16px', fontSize: 13 }} onClick={() => setCanjeandoId(null)}>
+                                Cancelar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-
-                      {s.compradoMes > 0 ? (
-                        <Pill tipo="ok" texto={`Ya compró ${etiquetaMes}`} />
-                      ) : (
-                        <Pill tipo="neutro" texto={`Aún no compró ${etiquetaMes}`} />
-                      )}
-
-                      {editable && s.saldo > 0 && (
-                        <button className="troya-btn" style={{ padding: '7px 14px', fontSize: 13, marginLeft: 'auto' }} onClick={() => empezarCanje(s.punto_troya_id)}>
-                          Registrar canje
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )
-              )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -1528,6 +1537,23 @@ function IconBuscar() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="7" />
       <path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
+}
+
+function IconCopiar() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 13l4 4L19 7" />
     </svg>
   );
 }
