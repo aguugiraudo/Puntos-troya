@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import InputMoneda from '@/components/InputMoneda';
@@ -28,6 +28,69 @@ type FilaDia = {
 };
 
 const CSS = `
+.sv-inp {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px dashed #D8CCC2;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink);
+  transition: border-color 0.15s, background 0.15s;
+}
+.sv-inp:hover { border-color: var(--orange); }
+.sv-inp:focus {
+  outline: none;
+  border: 1px solid var(--orange);
+  background: #FFFBE6;
+  box-shadow: 0 0 0 3px rgba(235, 103, 38, 0.13);
+}
+.sv-inp::placeholder { color: #C9BEB4; font-weight: 400; }
+.sv-inp--grande { padding: 9px 6px; font-size: 17px; }
+.sv-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--orange);
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.sv-link:hover { text-decoration: underline; }
+.sv-seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.sv-seg button {
+  padding: 9px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  background: #fff;
+  color: var(--ink);
+}
+.sv-seg button + button { border-left: 1px solid var(--line); }
+.sv-seg button.on { background: var(--red); color: #fff; }
+.sv-resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.sv-celda { background: #fff; padding: 14px 18px; }
 @media print {
   body * { visibility: hidden !important; }
   .sv-hoja, .sv-hoja * { visibility: visible !important; }
@@ -116,7 +179,7 @@ function Pct({ p, grande }: { p: number | null; grande?: boolean }) {
 function Dif({ v, grande }: { v: number | null; grande?: boolean }) {
   if (v === null) return null;
   return (
-    <span style={{ color: v >= 0 ? '#2E7D32' : 'var(--red)', fontWeight: 700, fontSize: grande ? 22 : undefined, whiteSpace: 'nowrap' }}>
+    <span style={{ color: v >= 0 ? '#2E7D32' : 'var(--red)', fontWeight: 700, fontSize: grande ? 26 : undefined, whiteSpace: 'nowrap' }}>
       {moneyDif(v)}
     </span>
   );
@@ -147,6 +210,7 @@ function CeldaMonto({
 
   return (
     <input
+      className={`sv-inp ${grande ? 'sv-inp--grande' : ''}`}
       type="text"
       inputMode="numeric"
       value={formateado}
@@ -164,18 +228,6 @@ function CeldaMonto({
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-      }}
-      style={{
-        width: '100%',
-        padding: grande ? '8px 6px' : '6px 8px',
-        border: '1px solid var(--line)',
-        borderRadius: 8,
-        background: '#FFFBE6',
-        fontFamily: 'var(--font-body)',
-        fontSize: grande ? 17 : 13,
-        fontWeight: 700,
-        textAlign: 'center',
-        color: 'var(--ink)',
       }}
     />
   );
@@ -196,6 +248,7 @@ export default function SeguimientoVentasPage() {
 
   const [objetivo, setObjetivo] = useState(0);
   const [objetivoEdit, setObjetivoEdit] = useState('');
+  const [editandoObj, setEditandoObj] = useState(false);
   const [guardandoObj, setGuardandoObj] = useState(false);
   const [dias, setDias] = useState<Record<string, DiaGuardado>>({});
 
@@ -210,6 +263,7 @@ export default function SeguimientoVentasPage() {
   const esMesActual = mesSel.a === hoy.getFullYear() && mesSel.m === hoy.getMonth();
   const limiteMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
   const esUltimoMes = mesSel.a === limiteMes.getFullYear() && mesSel.m === limiteMes.getMonth();
+  const esFuturo = new Date(mesSel.a, mesSel.m, 1) > new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   const diasEnMes = new Date(mesSel.a, mesSel.m + 1, 0).getDate();
   const inicioISO = iso(mesSel.a, mesSel.m, 1);
   const finISO = iso(mesSel.a, mesSel.m, diasEnMes);
@@ -221,6 +275,7 @@ export default function SeguimientoVentasPage() {
     const o = obj ? Number(obj.objetivo) : 0;
     setObjetivo(o);
     setObjetivoEdit(o > 0 ? String(Math.round(o)) : '');
+    setEditandoObj(false);
 
     const { data: diasData } = await supabase
       .from('seguimiento_ventas_dia')
@@ -305,6 +360,7 @@ export default function SeguimientoVentasPage() {
       return;
     }
     setObjetivo(Number(objetivoEdit));
+    setEditandoObj(false);
   }
 
   async function guardarRapida() {
@@ -400,7 +456,10 @@ export default function SeguimientoVentasPage() {
 
   const vendidoTotal = filas.reduce((a, f) => a + (f.vendido ?? 0), 0);
   const pctMes = objetivo > 0 ? vendidoTotal / objetivo : null;
-  const difActual = ultimoCargado > 0 ? filas[ultimoCargado - 1].dif : null;
+  const ultimaFila = ultimoCargado > 0 ? filas[ultimoCargado - 1] : null;
+  const difActual = ultimaFila ? ultimaFila.dif : null;
+  const pctAcumUlt = ultimaFila ? ultimaFila.pctAcum : null;
+  const planPct = ultimaFila && objetivo > 0 ? ultimaFila.objetivoAcum / objetivo : null;
 
   const cargadosHabiles = filas.filter((f) => f.habil && f.vendido !== null);
   const vendidoHabil = cargadosHabiles.reduce((a, f) => a + (f.vendido ?? 0), 0);
@@ -422,157 +481,205 @@ export default function SeguimientoVentasPage() {
   const difSemana = cerradasHastaFin.length > 0 ? cerradasHastaFin[cerradasHastaFin.length - 1].dif : null;
 
   const tarjeta: React.CSSProperties = { background: '#fff', border: '1px solid var(--line)', borderRadius: 14, padding: '14px 18px' };
-  const etiqueta: React.CSSProperties = { fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 };
+  const etiqueta: React.CSSProperties = { fontSize: 11.5, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 };
   const numeroGrande: React.CSSProperties = { fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, lineHeight: 1.15, marginTop: 4 };
-  const botonInactivo: React.CSSProperties = { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' };
+  const chico: React.CSSProperties = { fontSize: 12.5, color: 'var(--muted)', marginTop: 4, lineHeight: 1.4 };
 
   const vendidoQ = qFecha ? dias[qFecha]?.vendido ?? null : null;
-  const objetivoCambio = objetivoEdit !== (objetivo > 0 ? String(Math.round(objetivo)) : '');
+  const mostrarEdicionObj = puedeEditarModulo && (editandoObj || objetivo === 0);
 
   return (
     <div>
       <style>{CSS}</style>
 
+      {/* TÍTULO + MES */}
       <div className="troya-header">
         <div>
           <h1>Seguimiento de ventas</h1>
           <p className="troya-subtitulo">Objetivo diario, semanal y mensual de la unidad{!puedeEditarModulo && ' · Solo lectura'}</p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 14px' }} onClick={() => cambiarMes(-1)} title="Mes anterior">←</button>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, minWidth: 150, textAlign: 'center' }}>
+            {cap(MESES[mesSel.m])} {mesSel.a}
+          </div>
+          <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 14px' }} onClick={() => cambiarMes(1)} disabled={esUltimoMes} title="Mes siguiente">→</button>
+          {!esMesActual && (
+            <button className="troya-btn" style={{ padding: '8px 14px' }} onClick={() => setMesSel({ a: hoy.getFullYear(), m: hoy.getMonth() })}>
+              Mes actual
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* MES */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <button className="troya-btn troya-btn-secundario" onClick={() => cambiarMes(-1)} title="Mes anterior">←</button>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, minWidth: 180, textAlign: 'center' }}>
-          {cap(MESES[mesSel.m])} {mesSel.a}
-        </div>
-        <button className="troya-btn troya-btn-secundario" onClick={() => cambiarMes(1)} disabled={esUltimoMes} title="Mes siguiente">→</button>
-        {!esMesActual && (
-          <button className="troya-btn" onClick={() => setMesSel({ a: hoy.getFullYear(), m: hoy.getMonth() })}>
-            Volver al mes actual
-          </button>
-        )}
-      </div>
-
-      {/* OBJETIVO DEL MES */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', background: 'var(--tint-orange)', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
-        {puedeEditarModulo ? (
-          <>
-            <span style={{ fontSize: 13.5, fontWeight: 700 }}>Objetivo del mes</span>
-            <div style={{ flex: '0 1 220px', display: 'flex' }}>
-              <InputMoneda value={objetivoEdit} onChange={setObjetivoEdit} placeholder="Objetivo mensual" />
-            </div>
-            {objetivoCambio && (
-              <button className="troya-btn" onClick={guardarObjetivo} disabled={guardandoObj}>
-                {guardandoObj ? 'Guardando...' : 'Guardar objetivo'}
-              </button>
-            )}
-          </>
-        ) : (
-          <span style={{ fontSize: 13.5, fontWeight: 700 }}>Objetivo del mes: {objetivo > 0 ? money(objetivo) : 'sin definir'}</span>
-        )}
-        <span style={{ fontSize: 13.5 }}>
-          Días hábiles: <strong>{diasHabiles}</strong> · Objetivo por día hábil: <strong>{objetivo > 0 ? money(objDia) : '—'}</strong>
-        </span>
-      </div>
-      {objetivo === 0 && puedeEditarModulo && (
-        <p style={{ color: '#8A6D00', fontSize: 13, margin: '-6px 0 16px' }}>
-          Definí el objetivo del mes para que se calculen los objetivos diarios, semanales y los porcentajes.
-        </p>
-      )}
-
-      {/* RESUMEN DEL MES */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginBottom: 18 }}>
-        <div style={tarjeta}>
-          <div style={etiqueta}>Vendido del mes</div>
-          <div style={numeroGrande}>{money(vendidoTotal)}</div>
-          <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>de {objetivo > 0 ? money(objetivo) : '—'}</div>
-        </div>
-        <div style={tarjeta}>
-          <div style={etiqueta}>Cumplimiento del mes</div>
-          <div style={{ marginTop: 8 }}>{pctMes !== null ? <Pct p={pctMes} grande /> : <span style={{ color: 'var(--muted)' }}>—</span>}</div>
-        </div>
-        <div style={tarjeta}>
-          <div style={etiqueta}>Diferencia acumulada</div>
-          <div style={{ marginTop: 8 }}>{difActual !== null ? <Dif v={difActual} grande /> : <span style={{ color: 'var(--muted)' }}>—</span>}</div>
-          <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>contra el objetivo al último día cargado</div>
-        </div>
-        {esMesActual && objetivo > 0 && (
-          <div style={tarjeta}>
-            <div style={etiqueta}>Ritmo</div>
-            {proyeccion !== null ? (
-              <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45 }}>
-                Al ritmo actual cerrás en <strong>{money(proyeccion)}</strong> ({Math.round((proyeccion / objetivo) * 100)}%).
+      {/* FRANJA DE RESUMEN */}
+      <div className="sv-resumen">
+        {/* Objetivo */}
+        <div className="sv-celda">
+          <div style={etiqueta}>Objetivo del mes</div>
+          {mostrarEdicionObj ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 150px', display: 'flex' }}>
+                <InputMoneda value={objetivoEdit} onChange={setObjetivoEdit} placeholder="Objetivo mensual" />
               </div>
-            ) : (
-              <div style={{ fontSize: 14, marginTop: 6, color: 'var(--muted)' }}>Cargá algún día para ver la proyección.</div>
-            )}
-            <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45 }}>
-              {faltante <= 0 ? (
-                <strong style={{ color: '#2E7D32' }}>Objetivo cumplido.</strong>
-              ) : porDia !== null ? (
-                <>
-                  Para llegar hay que vender <strong>{money(porDia)}</strong> por día ({restantes} días hábiles).
-                </>
-              ) : (
-                <>Mes cerrado: faltaron {money(faltante)}.</>
+              <button className="troya-btn" style={{ padding: '10px 16px' }} onClick={guardarObjetivo} disabled={guardandoObj}>
+                {guardandoObj ? 'Guardando...' : 'Guardar'}
+              </button>
+              {objetivo > 0 && (
+                <button
+                  className="troya-btn troya-btn-secundario"
+                  style={{ padding: '10px 16px' }}
+                  onClick={() => {
+                    setEditandoObj(false);
+                    setObjetivoEdit(String(Math.round(objetivo)));
+                  }}
+                >
+                  Cancelar
+                </button>
               )}
             </div>
+          ) : (
+            <>
+              <div style={{ ...numeroGrande, color: '#EB6726' }}>{objetivo > 0 ? money(objetivo) : '—'}</div>
+              <div style={chico}>
+                {diasHabiles} días hábiles · {objetivo > 0 ? money(objDia) : '—'} por día{' '}
+                {puedeEditarModulo && (
+                  <button className="sv-link" onClick={() => setEditandoObj(true)}>
+                    Editar
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+          {objetivo === 0 && puedeEditarModulo && (
+            <div style={{ ...chico, color: '#8A6D00' }}>Definilo para calcular objetivos diarios y porcentajes.</div>
+          )}
+        </div>
+
+        {/* Vendido */}
+        <div className="sv-celda">
+          <div style={etiqueta}>Vendido del mes</div>
+          <div style={numeroGrande}>{money(vendidoTotal)}</div>
+          <div style={{ position: 'relative', height: 8, background: '#F1EDE8', borderRadius: 6, margin: '10px 0 6px' }}>
+            <div style={{ width: `${Math.min(100, (pctMes ?? 0) * 100)}%`, height: '100%', background: 'var(--orange)', borderRadius: 6 }} />
+            {planPct !== null && (
+              <div
+                title="Dónde deberías ir según el plan"
+                style={{ position: 'absolute', top: -3, bottom: -3, left: `${Math.min(100, planPct * 100)}%`, width: 2, background: 'var(--ink)' }}
+              />
+            )}
           </div>
-        )}
+          <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+            {pctMes !== null ? `${Math.round(pctMes * 100)}% del objetivo` : 'Sin objetivo definido'}
+            {planPct !== null ? ` · el plan marca ${Math.round(planPct * 100)}%` : ''}
+          </div>
+        </div>
+
+        {/* Diferencia */}
+        <div className="sv-celda">
+          <div style={etiqueta}>Diferencia contra el plan</div>
+          <div style={{ marginTop: 6 }}>{difActual !== null ? <Dif v={difActual} grande /> : <span style={{ ...numeroGrande, color: 'var(--muted)' }}>—</span>}</div>
+          <div style={chico}>
+            {pctAcumUlt !== null ? `${Math.round(pctAcumUlt * 100)}% del plan hasta el último día cargado` : 'Cargá un día para verla'}
+          </div>
+        </div>
+
+        {/* Ritmo / cierre */}
+        <div className="sv-celda">
+          <div style={etiqueta}>{esMesActual ? 'Ritmo' : 'Cierre del mes'}</div>
+          {objetivo === 0 ? (
+            <div style={{ ...chico, marginTop: 8 }}>Definí el objetivo para ver la proyección.</div>
+          ) : esFuturo ? (
+            <div style={{ ...chico, marginTop: 8 }}>Mes por comenzar.</div>
+          ) : esMesActual ? (
+            <div style={{ fontSize: 13.5, marginTop: 6, lineHeight: 1.5 }}>
+              {proyeccion !== null ? (
+                <div>
+                  Cerrás en <strong>{money(proyeccion)}</strong> ({Math.round((proyeccion / objetivo) * 100)}%)
+                </div>
+              ) : (
+                <div style={{ color: 'var(--muted)' }}>Cargá un día para ver la proyección.</div>
+              )}
+              <div>
+                {faltante <= 0 ? (
+                  <strong style={{ color: '#2E7D32' }}>Objetivo cumplido.</strong>
+                ) : porDia !== null ? (
+                  <>
+                    Hay que vender <strong>{money(porDia)}</strong> por día ({restantes} hábiles)
+                  </>
+                ) : (
+                  <>Faltaron {money(faltante)}</>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13.5, marginTop: 6, lineHeight: 1.5 }}>
+              {faltante <= 0 ? (
+                <strong style={{ color: '#2E7D32' }}>Objetivo cumplido.</strong>
+              ) : (
+                <>Faltaron <strong>{money(faltante)}</strong> para el objetivo.</>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* CARGA RÁPIDA */}
+      {/* CARGAR VENTA */}
       {puedeEditarModulo && (
-        <div style={{ ...tarjeta, marginBottom: 18 }}>
-          <p style={{ fontSize: 13.5, fontWeight: 700, margin: '0 0 8px' }}>Cargar la venta de un día</p>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              className="troya-input"
-              type="date"
-              style={{ flex: '0 0 170px' }}
-              min={inicioISO}
-              max={finISO}
-              value={qFecha}
-              onChange={(e) => {
-                const f = e.target.value;
-                setQFecha(f);
-                const v = dias[f]?.vendido ?? null;
-                setQMonto(v !== null ? String(Math.round(v)) : '');
-              }}
-            />
-            {qFecha && (
-              <span style={{ fontSize: 13.5, fontWeight: 600, minWidth: 80 }}>{DIAS_LARGOS[new Date(qFecha + 'T00:00:00').getDay()]}</span>
-            )}
+        <div style={{ ...tarjeta, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700 }}>Cargar venta</span>
+          <input
+            className="troya-input"
+            type="date"
+            style={{ flex: '0 0 150px', padding: '8px 10px' }}
+            min={inicioISO}
+            max={finISO}
+            value={qFecha}
+            onChange={(e) => {
+              const f = e.target.value;
+              setQFecha(f);
+              const v = dias[f]?.vendido ?? null;
+              setQMonto(v !== null ? String(Math.round(v)) : '');
+            }}
+          />
+          {qFecha && (
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', minWidth: 72 }}>
+              {DIAS_LARGOS[new Date(qFecha + 'T00:00:00').getDay()]}
+            </span>
+          )}
+          <div style={{ flex: '1 1 180px', maxWidth: 280, display: 'flex' }}>
             <InputMoneda value={qMonto} onChange={setQMonto} placeholder="Monto vendido ese día" />
-            <button className="troya-btn" onClick={guardarRapida} disabled={guardandoQ}>
-              {guardandoQ ? 'Guardando...' : 'Guardar venta'}
-            </button>
           </div>
+          <button className="troya-btn" onClick={guardarRapida} disabled={guardandoQ}>
+            {guardandoQ ? 'Guardando...' : 'Guardar venta'}
+          </button>
           {vendidoQ !== null && (
-            <p className="troya-subtitulo" style={{ margin: '8px 0 0' }}>
-              Ese día ya tiene {money(vendidoQ)} cargados. Si guardás, se reemplaza.
-            </p>
+            <span className="troya-subtitulo" style={{ margin: 0 }}>
+              Ya tiene {money(vendidoQ)}: si guardás, se reemplaza.
+            </span>
           )}
         </div>
       )}
 
-      {/* VISTAS */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-        <button className="troya-btn" style={vista === 'semana' ? {} : botonInactivo} onClick={() => setVista('semana')}>Semana</button>
-        <button className="troya-btn" style={vista === 'mes' ? {} : botonInactivo} onClick={() => setVista('mes')}>Mes completo</button>
+      {/* SELECTOR DE VISTA */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+        <div className="sv-seg">
+          <button className={vista === 'semana' ? 'on' : ''} onClick={() => setVista('semana')}>Semana</button>
+          <button className={vista === 'mes' ? 'on' : ''} onClick={() => setVista('mes')}>Mes completo</button>
+        </div>
 
         {vista === 'semana' && (
           <>
-            <span style={{ width: 12 }} />
-            <button className="troya-btn troya-btn-secundario" onClick={() => setSemana(Math.max(1, semanaOk - 1))} disabled={semanaOk <= 1}>←</button>
-            <div style={{ fontWeight: 700, minWidth: 200, textAlign: 'center', fontSize: 14.5 }}>
-              Semana {semanaOk} · del {fechaCorta(mesSel.m, sIni)} al {fechaCorta(mesSel.m, sFin)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 14px' }} onClick={() => setSemana(Math.max(1, semanaOk - 1))} disabled={semanaOk <= 1}>←</button>
+              <div style={{ fontWeight: 700, minWidth: 210, textAlign: 'center', fontSize: 14 }}>
+                Semana {semanaOk} · del {fechaCorta(mesSel.m, sIni)} al {fechaCorta(mesSel.m, sFin)}
+              </div>
+              <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 14px' }} onClick={() => setSemana(Math.min(info.total, semanaOk + 1))} disabled={semanaOk >= info.total}>→</button>
             </div>
-            <button className="troya-btn troya-btn-secundario" onClick={() => setSemana(Math.min(info.total, semanaOk + 1))} disabled={semanaOk >= info.total}>→</button>
             <span style={{ flex: 1 }} />
-            <button className="troya-btn troya-btn-secundario" onClick={imprimir}>Imprimir</button>
-            <button className="troya-btn troya-btn-secundario" onClick={descargarImagen} disabled={generando}>
+            <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 14px' }} onClick={imprimir}>Imprimir</button>
+            <button className="troya-btn troya-btn-secundario" style={{ padding: '8px 14px' }} onClick={descargarImagen} disabled={generando}>
               {generando ? 'Generando...' : 'Descargar imagen'}
             </button>
           </>
@@ -689,71 +796,125 @@ export default function SeguimientoVentasPage() {
 
       {/* ============ VISTA MES ============ */}
       {vista === 'mes' && (
-        <div className="troya-matriz-wrapper">
-          <table className="troya-matriz-tabla troya-matriz-tabla--compacta">
-            <colgroup>
-              <col style={{ width: '6%' }} />
-              <col style={{ width: '11%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '12%' }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Hábil</th>
-                <th>Fecha</th>
-                <th>Objetivo</th>
-                <th>Vendido</th>
-                <th>%</th>
-                <th>Objetivo acum.</th>
-                <th>Vendido acum.</th>
-                <th>% acum.</th>
-                <th>Diferencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((f) => {
-                const esHoy = f.fecha === hoyISO;
-                return (
-                  <tr key={f.fecha} style={{ background: !f.habil ? '#F4F0EB' : esHoy ? '#FFF8F3' : undefined }}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        style={{ width: 17, height: 17 }}
-                        checked={f.habil}
-                        disabled={!puedeEditarModulo}
-                        onChange={(e) => cambiarHabil(f, e.target.checked)}
-                        title="Destildá los feriados o días sin actividad"
-                      />
-                    </td>
-                    <td style={{ fontWeight: esHoy ? 800 : 600 }}>
-                      {DIAS_CORTOS[f.semanaDia]} {fechaCorta(mesSel.m, f.dia)}
-                    </td>
-                    <td>{f.objetivo > 0 ? money(f.objetivo) : '—'}</td>
-                    <td>
-                      <CeldaMonto valor={f.vendido} editable={puedeEditarModulo} estatico={false} onGuardar={(v) => guardarVendido(f.fecha, v)} />
-                    </td>
-                    <td><Pct p={f.pctDia} /></td>
-                    <td>{money(f.objetivoAcum)}</td>
-                    <td>{f.vendidoAcum !== null ? money(f.vendidoAcum) : ''}</td>
-                    <td><Pct p={f.pctAcum} /></td>
-                    <td><Dif v={f.dif} /></td>
+        <>
+          <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th rowSpan={2} style={thEstilo('#1C1512')}>Fecha</th>
+                    <th colSpan={3} style={thEstilo('#EB6726')}>DIARIO ($)</th>
+                    <th colSpan={3} style={thEstilo('#DA231F')}>ACUMULADO ($)</th>
+                    <th rowSpan={2} style={thEstilo('#2E7D32')}>DIFERENCIA</th>
+                    <th rowSpan={2} style={thEstilo('#1C1512')}>HÁBIL</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {vista === 'mes' && (
-        <p className="troya-subtitulo" style={{ marginTop: 10 }}>
-          Destildá Hábil en los feriados: el objetivo diario se reparte solo entre los días hábiles que quedan, y el acumulado siempre cierra en el objetivo del mes.
-          También podés tildar un sábado si se trabaja.
-        </p>
+                  <tr>
+                    <th style={thEstilo('#F3A572', '#1C1512')}>Objetivo</th>
+                    <th style={thEstilo('#F3A572', '#1C1512')}>Vendido</th>
+                    <th style={thEstilo('#F3A572', '#1C1512')}>%</th>
+                    <th style={thEstilo('#E2726E')}>Objetivo</th>
+                    <th style={thEstilo('#E2726E')}>Vendido</th>
+                    <th style={thEstilo('#E2726E')}>%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: info.total }, (_, i) => i + 1).map((k) => {
+                    const { ini, fin } = info.rango(k);
+                    const filasSem = filas.slice(ini - 1, fin);
+                    const objSem = filasSem.reduce((a, f) => a + f.objetivo, 0);
+                    const vendSem = filasSem.reduce((a, f) => a + (f.vendido ?? 0), 0);
+                    const hayCarga = filasSem.some((f) => f.vendido !== null);
+                    const pctSem = objSem > 0 && hayCarga ? vendSem / objSem : null;
+
+                    return (
+                      <Fragment key={k}>
+                        <tr>
+                          <td colSpan={9} style={{ background: '#FDF0E7', padding: '8px 14px', borderTop: '1px solid #F0E3D8' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#8A5A3C', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                                Semana {k} · del {fechaCorta(mesSel.m, ini)} al {fechaCorta(mesSel.m, fin)}
+                              </span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12.5, color: '#5C4636', flexWrap: 'wrap' }}>
+                                <span>Objetivo <strong>{objSem > 0 ? money(objSem) : '—'}</strong></span>
+                                <span>Vendido <strong>{hayCarga ? money(vendSem) : '—'}</strong></span>
+                                <Pct p={pctSem} />
+                                <button
+                                  className="sv-link"
+                                  onClick={() => {
+                                    setSemana(k);
+                                    setVista('semana');
+                                  }}
+                                >
+                                  Ver semana →
+                                </button>
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {filasSem.map((f) => {
+                          const esHoy = f.fecha === hoyISO;
+                          const apagado = !f.habil;
+                          return (
+                            <tr key={f.fecha} style={{ background: apagado ? '#F8F5F1' : esHoy ? '#FFF8F3' : '#fff' }}>
+                              <td
+                                style={{
+                                  ...tdMes(apagado ? 'var(--muted)' : 'var(--ink)'),
+                                  textAlign: 'left',
+                                  paddingLeft: 16,
+                                  boxShadow: esHoy ? 'inset 3px 0 0 var(--orange)' : undefined,
+                                  fontWeight: esHoy ? 800 : 600,
+                                }}
+                              >
+                                {DIAS_CORTOS[f.semanaDia]} {fechaCorta(mesSel.m, f.dia)}
+                                {esHoy && (
+                                  <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: 'var(--orange)', textTransform: 'uppercase' }}>hoy</span>
+                                )}
+                              </td>
+                              <td style={tdMes(apagado ? 'var(--muted)' : 'var(--ink)')}>{f.objetivo > 0 ? money(f.objetivo) : '—'}</td>
+                              <td style={tdMes('var(--ink)')}>
+                                <CeldaMonto valor={f.vendido} editable={puedeEditarModulo} estatico={false} onGuardar={(v) => guardarVendido(f.fecha, v)} />
+                              </td>
+                              <td style={tdMes('var(--ink)')}><Pct p={f.pctDia} /></td>
+                              <td style={tdMes(apagado ? 'var(--muted)' : 'var(--ink)')}>{money(f.objetivoAcum)}</td>
+                              <td style={tdMes('var(--ink)')}>{f.vendidoAcum !== null ? money(f.vendidoAcum) : ''}</td>
+                              <td style={tdMes('var(--ink)')}><Pct p={f.pctAcum} /></td>
+                              <td style={tdMes('var(--ink)')}><Dif v={f.dif} /></td>
+                              <td style={tdMes('var(--ink)')}>
+                                <input
+                                  type="checkbox"
+                                  style={{ width: 17, height: 17, cursor: puedeEditarModulo ? 'pointer' : 'default' }}
+                                  checked={f.habil}
+                                  disabled={!puedeEditarModulo}
+                                  onChange={(e) => cambiarHabil(f, e.target.checked)}
+                                  title="Destildá los feriados o los días sin actividad"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p className="troya-subtitulo" style={{ marginTop: 10 }}>
+            Destildá Hábil en los feriados: el objetivo diario se reparte solo entre los días hábiles que quedan y el acumulado siempre cierra en el objetivo del mes.
+            También podés tildar un sábado si se trabaja.
+          </p>
+        </>
       )}
     </div>
   );
@@ -782,5 +943,17 @@ function tdEstilo(o: { fondo?: string; color?: string; peso?: number; tam?: numb
     fontSize: o.tam ?? 14,
     fontWeight: o.peso ?? 700,
     height: 54,
+  };
+}
+
+function tdMes(color: string): React.CSSProperties {
+  return {
+    color,
+    borderBottom: '1px solid #F1EDE8',
+    padding: '8px 6px',
+    textAlign: 'center',
+    fontSize: 13.5,
+    fontWeight: 600,
+    height: 46,
   };
 }
