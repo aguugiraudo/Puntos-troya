@@ -3,8 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/AuthContext';
 import CumplimientoGauge from '@/components/CumplimientoGauge';
 import InputMoneda from '@/components/InputMoneda';
+
+const MODULO = 'activos';
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 type PuntoTroya = {
   id: string;
@@ -13,21 +18,32 @@ type PuntoTroya = {
   clientes: { nombre: string; localidad: string | null; provincia: string | null } | null;
 };
 
-function inicioTrimestreActual(): Date {
-  const hoy = new Date();
-  const inicioTrimestre = Math.floor(hoy.getMonth() / 3) * 3;
-  return new Date(hoy.getFullYear(), inicioTrimestre, 1);
+// punto_troya_id -> { 'AAAA-MM-01' -> monto comprado ese mes }
+type ComprasMap = Record<string, Record<string, number>>;
+
+function isoMes(anio: number, mes: number) {
+  const f = new Date(anio, mes, 1);
+  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
-function primerDiaMesActual(): string {
-  const hoy = new Date();
-  return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+function cap(texto: string) {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+function money(v: number) {
+  return `$${v.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 }
 
 export default function ActivosPage() {
   const router = useRouter();
+  const { puedeVer, puedeEditar } = useAuth();
+  const puedeVerModulo = puedeVer(MODULO);
+  const puedeEditarModulo = puedeEditar(MODULO);
+
+  const hoy = new Date();
+
   const [puntos, setPuntos] = useState<PuntoTroya[]>([]);
-  const [comprasPorPunto, setComprasPorPunto] = useState<Record<string, number>>({});
+  const [compras, setCompras] = useState<ComprasMap>({});
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
 
@@ -35,8 +51,15 @@ export default function ActivosPage() {
   const [minimoEdit, setMinimoEdit] = useState('');
   const [exclusividadEdit, setExclusividadEdit] = useState(false);
 
+  // Carga de compras (se puede ir y volver entre meses)
   const [cargandoCompraId, setCargandoCompraId] = useState<string | null>(null);
+  const [mesCompra, setMesCompra] = useState<{ a: number; m: number }>({ a: new Date().getFullYear(), m: new Date().getMonth() });
   const [montoCompra, setMontoCompra] = useState('');
+  const [montoExistente, setMontoExistente] = useState<number | null>(null);
+  const [guardandoCompra, setGuardandoCompra] = useState(false);
+  const [guardadoOk, setGuardadoOk] = useState(false);
+
+  const esMesActualCompra = mesCompra.a === hoy.getFullYear() && mesCompra.m === hoy.getMonth();
 
   async function cargarActivos() {
     setCargando(true);
@@ -53,34 +76,37 @@ export default function ActivosPage() {
 
     setPuntos((puntosData as any) ?? []);
 
-    const inicioISO = inicioTrimestreActual().toISOString().slice(0, 10);
+    // Se traen los últimos 14 meses: alcanza para el trimestre en curso y para el historial reciente
+    const desde = isoMes(hoy.getFullYear(), hoy.getMonth() - 13);
     const { data: comprasData } = await supabase
       .from('compras_mensuales')
-      .select('punto_troya_id, monto')
-      .gte('mes', inicioISO);
+      .select('punto_troya_id, mes, monto')
+      .gte('mes', desde);
 
-    const totales: Record<string, number> = {};
-    (comprasData ?? []).forEach((c) => {
-      totales[c.punto_troya_id] = (totales[c.punto_troya_id] ?? 0) + Number(c.monto);
+    const mapa: ComprasMap = {};
+    (comprasData ?? []).forEach((c: any) => {
+      if (!mapa[c.punto_troya_id]) mapa[c.punto_troya_id] = {};
+      mapa[c.punto_troya_id][String(c.mes).slice(0, 10)] = Number(c.monto);
     });
 
-    setComprasPorPunto(totales);
+    setCompras(mapa);
     setCargando(false);
   }
 
   useEffect(() => {
-    cargarActivos();
-  }, []);
+    if (puedeVerModulo) cargarActivos();
+  }, [puedeVerModulo]);
 
-  const puntosFiltrados = puntos.filter((p) => {
-    const texto = busqueda.trim().toLowerCase();
-    if (!texto) return true;
-    return [p.clientes?.nombre, p.clientes?.localidad, p.clientes?.provincia]
-      .filter(Boolean)
-      .some((campo) => campo!.toLowerCase().includes(texto));
-  });
+  function totalTrimestre(puntoId: string) {
+    const inicio = isoMes(hoy.getFullYear(), Math.floor(hoy.getMonth() / 3) * 3);
+    const meses = compras[puntoId] ?? {};
+    return Object.entries(meses)
+      .filter(([mes]) => mes >= inicio)
+      .reduce((acc, [, monto]) => acc + monto, 0);
+  }
 
   function empezarEdicion(p: PuntoTroya) {
+    setCargandoCompraId(null);
     setEditandoId(p.id);
     setMinimoEdit(p.minimo_trimestral ? String(p.minimo_trimestral) : '');
     setExclusividadEdit(p.exclusividad_zona);
@@ -118,31 +144,104 @@ export default function ActivosPage() {
     cargarActivos();
   }
 
-  function empezarCargaCompra(id: string) {
-    setCargandoCompraId(id);
-    setMontoCompra('');
+  // ---------- Compras por mes ----------
+  async function cargarMontoMes(puntoId: string, anio: number, mes: number) {
+    const { data } = await supabase
+      .from('compras_mensuales')
+      .select('monto')
+      .eq('punto_troya_id', puntoId)
+      .eq('mes', isoMes(anio, mes))
+      .maybeSingle();
+
+    const existente = data ? Number(data.monto) : null;
+    setMontoExistente(existente);
+    setMontoCompra(existente !== null ? String(Math.round(existente)) : '');
+  }
+
+  async function irAMes(puntoId: string, anio: number, mes: number) {
+    const f = new Date(anio, mes, 1);
+    const limite = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    if (f > limite) return;
+    setMesCompra({ a: f.getFullYear(), m: f.getMonth() });
+    setGuardadoOk(false);
+    await cargarMontoMes(puntoId, f.getFullYear(), f.getMonth());
+  }
+
+  function empezarCargaCompra(puntoId: string) {
+    setEditandoId(null);
+    setCargandoCompraId(puntoId);
+    irAMes(puntoId, hoy.getFullYear(), hoy.getMonth());
   }
 
   async function guardarCompra(puntoId: string) {
-    if (!montoCompra) return;
-
-    const { error } = await supabase.from('compras_mensuales').upsert(
-      {
-        punto_troya_id: puntoId,
-        mes: primerDiaMesActual(),
-        monto: Number(montoCompra),
-      },
-      { onConflict: 'punto_troya_id,mes' }
-    );
-
-    if (error) {
-      alert('Error al cargar la compra: ' + error.message);
+    if (montoCompra === '') {
+      alert(`Poné el monto comprado en ${MESES[mesCompra.m]}.`);
       return;
     }
 
-    setCargandoCompraId(null);
-    cargarActivos();
+    const monto = Number(montoCompra);
+    const mes = isoMes(mesCompra.a, mesCompra.m);
+
+    setGuardandoCompra(true);
+    const { error } = await supabase.from('compras_mensuales').upsert(
+      { punto_troya_id: puntoId, mes, monto },
+      { onConflict: 'punto_troya_id,mes' }
+    );
+    setGuardandoCompra(false);
+
+    if (error) {
+      alert('Error al guardar la compra: ' + error.message);
+      return;
+    }
+
+    setCompras((prev) => ({ ...prev, [puntoId]: { ...(prev[puntoId] ?? {}), [mes]: monto } }));
+    setMontoExistente(monto);
+    setGuardadoOk(true);
+    setTimeout(() => setGuardadoOk(false), 2500);
   }
+
+  async function borrarCompraMes(puntoId: string) {
+    if (montoExistente === null) return;
+    const confirmado = confirm(`¿Borrar la compra de ${MESES[mesCompra.m]} ${mesCompra.a} (${money(montoExistente)})?`);
+    if (!confirmado) return;
+
+    const mes = isoMes(mesCompra.a, mesCompra.m);
+    const { error } = await supabase.from('compras_mensuales').delete().eq('punto_troya_id', puntoId).eq('mes', mes);
+    if (error) {
+      alert('No se pudo borrar: ' + error.message);
+      return;
+    }
+
+    setCompras((prev) => {
+      const copia = { ...(prev[puntoId] ?? {}) };
+      delete copia[mes];
+      return { ...prev, [puntoId]: copia };
+    });
+    setMontoExistente(null);
+    setMontoCompra('');
+  }
+
+  if (!puedeVerModulo) {
+    return (
+      <div className="troya-vacio">
+        <h3>No tenés acceso a esta sección</h3>
+        <p>Pedile al administrador que te habilite Activos desde el Panel de Accesos.</p>
+      </div>
+    );
+  }
+
+  const puntosFiltrados = puntos.filter((p) => {
+    const texto = busqueda.trim().toLowerCase();
+    if (!texto) return true;
+    return [p.clientes?.nombre, p.clientes?.localidad, p.clientes?.provincia]
+      .filter(Boolean)
+      .some((campo) => campo!.toLowerCase().includes(texto));
+  });
+
+  const ultimosMeses = Array.from({ length: 6 }, (_, i) => {
+    const f = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    return { a: f.getFullYear(), m: f.getMonth() };
+  });
 
   return (
     <div>
@@ -151,6 +250,7 @@ export default function ActivosPage() {
           <h1>Puntos Troya Activos</h1>
           <p className="troya-subtitulo">
             {busqueda ? `${puntosFiltrados.length} de ${puntos.length}` : `${puntos.length} confirmados`}
+            {!puedeEditarModulo && ' · Solo lectura'}
           </p>
         </div>
       </div>
@@ -180,7 +280,7 @@ export default function ActivosPage() {
       ) : (
         <div className="troya-lista">
           {puntosFiltrados.map((p) => {
-            const comprado = comprasPorPunto[p.id] ?? 0;
+            const comprado = totalTrimestre(p.id);
             const minimo = p.minimo_trimestral ?? 0;
             const porcentaje = minimo > 0 ? Math.round((comprado / minimo) * 100) : 0;
 
@@ -207,13 +307,78 @@ export default function ActivosPage() {
               return (
                 <div key={p.id} className="troya-card troya-card-editando">
                   <h3>{p.clientes?.nombre}</h3>
-                  <p className="troya-subtitulo" style={{ margin: 0 }}>Compra de este mes (se suma al trimestre en curso)</p>
-                  <div className="troya-form">
-                    <InputMoneda value={montoCompra} onChange={setMontoCompra} placeholder="Monto comprado este mes" />
+                  <p className="troya-subtitulo" style={{ margin: 0 }}>
+                    Cargá o corregí la compra de cualquier mes. Cada monto se suma al trimestre que corresponde.
+                  </p>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                    <button
+                      className="troya-btn troya-btn-secundario"
+                      onClick={() => irAMes(p.id, mesCompra.a, mesCompra.m - 1)}
+                      title="Mes anterior"
+                    >
+                      ←
+                    </button>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, minWidth: 170, textAlign: 'center' }}>
+                      {cap(MESES[mesCompra.m])} {mesCompra.a}
+                    </div>
+                    <button
+                      className="troya-btn troya-btn-secundario"
+                      onClick={() => irAMes(p.id, mesCompra.a, mesCompra.m + 1)}
+                      disabled={esMesActualCompra}
+                      title="Mes siguiente"
+                    >
+                      →
+                    </button>
                   </div>
-                  <div className="troya-card-acciones">
-                    <button className="troya-btn" onClick={() => guardarCompra(p.id)}>Guardar compra</button>
-                    <button className="troya-btn troya-btn-secundario" onClick={() => setCargandoCompraId(null)}>Cancelar</button>
+
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0 2px' }}>
+                    {ultimosMeses.map(({ a, m }) => {
+                      const monto = compras[p.id]?.[isoMes(a, m)];
+                      const seleccionado = a === mesCompra.a && m === mesCompra.m;
+                      return (
+                        <button
+                          key={`${a}-${m}`}
+                          onClick={() => irAMes(p.id, a, m)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 20,
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontFamily: 'var(--font-body)',
+                            border: seleccionado ? '1px solid var(--red)' : '1px solid var(--line)',
+                            background: seleccionado ? 'var(--tint-red)' : '#fff',
+                            color: seleccionado ? 'var(--red)' : 'var(--ink)',
+                          }}
+                        >
+                          {MESES_CORTOS[m]} {a !== hoy.getFullYear() ? a : ''} · {monto !== undefined ? money(monto) : '—'}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="troya-form">
+                    <InputMoneda value={montoCompra} onChange={setMontoCompra} placeholder={`Monto comprado en ${MESES[mesCompra.m]}`} />
+                  </div>
+
+                  {montoExistente !== null && (
+                    <p className="troya-subtitulo" style={{ margin: '6px 0 0' }}>
+                      Ya había {money(montoExistente)} cargados en {MESES[mesCompra.m]}. Si guardás un monto nuevo, lo reemplaza.
+                    </p>
+                  )}
+                  {guardadoOk && <p style={{ color: '#2E7D32', fontSize: 13, fontWeight: 600, margin: '6px 0 0' }}>Guardado.</p>}
+
+                  <div className="troya-card-acciones" style={{ marginTop: 12 }}>
+                    <button className="troya-btn" onClick={() => guardarCompra(p.id)} disabled={guardandoCompra}>
+                      {guardandoCompra ? 'Guardando...' : montoExistente !== null ? 'Actualizar compra' : 'Guardar compra'}
+                    </button>
+                    {montoExistente !== null && (
+                      <button className="troya-btn troya-btn-secundario" onClick={() => borrarCompraMes(p.id)}>
+                        Borrar este mes
+                      </button>
+                    )}
+                    <button className="troya-btn troya-btn-secundario" onClick={() => setCargandoCompraId(null)}>Cerrar</button>
                   </div>
                 </div>
               );
@@ -227,6 +392,11 @@ export default function ActivosPage() {
                     {[p.clientes?.localidad, p.clientes?.provincia].filter(Boolean).join(', ')}
                     {p.exclusividad_zona ? ' · Exclusividad de zona' : ''}
                   </p>
+                  {minimo > 0 && (
+                    <p style={{ fontSize: 12 }}>
+                      Trimestre: {money(comprado)} de {money(minimo)}
+                    </p>
+                  )}
                 </div>
                 <div className="troya-card-derecha">
                   <CumplimientoGauge porcentaje={porcentaje} />
@@ -234,15 +404,19 @@ export default function ActivosPage() {
                     <button className="troya-icon-btn" onClick={() => router.push(`/activos/${p.id}`)} title="Ver ficha completa">
                       <IconOjo />
                     </button>
-                    <button className="troya-icon-btn" onClick={() => empezarCargaCompra(p.id)} title="Cargar compra del mes">
-                      <IconMoneda />
-                    </button>
-                    <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar">
-                      <IconLapiz />
-                    </button>
-                    <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPunto(p)} title="Eliminar">
-                      <IconTacho />
-                    </button>
+                    {puedeEditarModulo && (
+                      <>
+                        <button className="troya-icon-btn" onClick={() => empezarCargaCompra(p.id)} title="Cargar o corregir compras por mes">
+                          <IconMoneda />
+                        </button>
+                        <button className="troya-icon-btn" onClick={() => empezarEdicion(p)} title="Editar mínimo y exclusividad">
+                          <IconLapiz />
+                        </button>
+                        <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPunto(p)} title="Eliminar">
+                          <IconTacho />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
