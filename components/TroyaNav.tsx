@@ -14,6 +14,7 @@ type Seccion = {
   icon: () => JSX.Element;
   pestanas: Pestana[];
   soloAdmin?: boolean;
+  entrada?: string;
 };
 
 const SECCIONES: Seccion[] = [
@@ -23,13 +24,14 @@ const SECCIONES: Seccion[] = [
     label: 'Puntos Troya',
     corto: 'Puntos Troya',
     icon: IconPuntos,
+    entrada: '/activos',
     pestanas: [
-      { href: '/prospectos', label: 'Prospectos', modulo: 'prospectos' },
-      { href: '/activos', label: 'Activos', modulo: 'activos' },
-      { href: '/mas/puntos-canje', label: 'Puntos y canje', modulo: 'puntos_canje' },
       { href: '/clientes', label: 'Clientes', modulo: 'clientes' },
+      { href: '/prospectos', label: 'Prospectos', modulo: 'prospectos' },
+      { href: '/mas/placas', label: 'Propuesta', modulo: 'placas' },
+      { href: '/activos', label: 'Activos', modulo: 'activos' },
       { href: '/mapa', label: 'Mapa', modulo: 'mapa' },
-      { href: '/mas/placas', label: 'Placas', modulo: 'placas' },
+      { href: '/mas/puntos-canje', label: 'Puntos y canje', modulo: 'puntos_canje' },
     ],
   },
   {
@@ -37,12 +39,13 @@ const SECCIONES: Seccion[] = [
     label: 'Gestión comercial',
     corto: 'Comercial',
     icon: IconComercial,
+    entrada: '/comercial/stock',
     pestanas: [
-      { href: '/comercial/cotizador', label: 'Cotizador', modulo: 'cotizador' },
       { href: '/comercial/costos-precios', label: 'Costos y precios', modulo: 'costos_precios' },
+      { href: '/mas/minimos-distribuidor', label: 'Mínimos distribuidor', modulo: 'minimos_distribuidor' },
       { href: '/comercial/promos', label: 'Promos', modulo: 'promos' },
+      { href: '/comercial/cotizador', label: 'Cotizador', modulo: 'cotizador' },
       { href: '/comercial/stock', label: 'Stock', modulo: 'stock' },
-      { href: '/mas/minimos-distribuidor', label: 'Mínimos 44%', modulo: 'minimos_distribuidor' },
     ],
   },
   {
@@ -109,10 +112,12 @@ export default function TroyaNav() {
   const { puedeVer, usuario, cerrarSesion } = useAuth();
   const esAdmin = !!usuario?.es_dueno;
 
-  // Cada sección muestra solo las pestañas que el usuario tiene habilitadas
+  // Cada sección muestra solo las pestañas que el usuario tiene habilitadas.
+  // Al tocar la sección se abre su pantalla de entrada; si no tiene permiso para esa, la primera que sí tenga.
   const secciones = SECCIONES.map((s) => {
     const visibles = s.soloAdmin ? (esAdmin ? s.pestanas : []) : s.pestanas.filter((p) => puedeVer(p.modulo));
-    const href = s.id === 'inicio' ? '/' : visibles[0]?.href ?? '';
+    const href =
+      s.id === 'inicio' ? '/' : visibles.find((p) => p.href === s.entrada)?.href ?? visibles[0]?.href ?? '';
     return { ...s, visibles, href };
   }).filter((s) => s.id === 'inicio' || s.visibles.length > 0);
 
