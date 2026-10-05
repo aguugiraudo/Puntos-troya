@@ -39,8 +39,9 @@ const SECCIONES: Seccion[] = [
     label: 'Gestión comercial',
     corto: 'Comercial',
     icon: IconComercial,
-    entrada: '/comercial/stock',
+    entrada: '/comercial/seguimiento',
     pestanas: [
+      { href: '/comercial/seguimiento', label: 'Seguimiento de ventas', modulo: 'seguimiento_ventas' },
       { href: '/comercial/costos-precios', label: 'Costos y precios', modulo: 'costos_precios' },
       { href: '/mas/minimos-distribuidor', label: 'Mínimos distribuidor', modulo: 'minimos_distribuidor' },
       { href: '/comercial/promos', label: 'Promos', modulo: 'promos' },
