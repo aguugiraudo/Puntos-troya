@@ -7,7 +7,10 @@ import { useAuth } from '@/lib/AuthContext';
 const MODULO = 'puntos_canje';
 const BUCKET = 'archivos-puntos-troya';
 const MAX_PREMIOS_PLACA = 6;
+const OTRO = '__otro__';
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+const ACLARACION = 'El premio se añade sin costo a tu próxima orden dentro del mes corriente.';
 
 const PASOS_CANJE = [
   'Elegí la recompensa de tu preferencia y contactá a tu asesor comercial.',
@@ -21,6 +24,8 @@ const CHISPAS = [
   { l: '78%', t: '66%', s: 3, o: 0.7 }, { l: '88%', t: '80%', s: 4, o: 0.9 }, { l: '93%', t: '58%', s: 3, o: 0.6 },
   { l: '12%', t: '92%', s: 4, o: 0.7 }, { l: '35%', t: '95%', s: 3, o: 0.8 }, { l: '62%', t: '96%', s: 4, o: 0.7 },
 ];
+
+type Pestana = 'premios' | 'placa' | 'saldos';
 
 type ItemCatalogo = {
   id: string;
@@ -38,7 +43,12 @@ type ProductoBase = {
   nombre: string;
   codigo: string | null;
   costo_completo: number | null;
-  costo_materia_prima: number | null;
+  precio_lista: number | null;
+};
+
+type ListaTroya = {
+  nombre: string;
+  descuento_porcentaje: number;
 };
 
 type StockFila = {
@@ -77,11 +87,10 @@ function mesISO(fecha: Date) {
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
-function badgeRent(v: number) {
-  const color = v < 0 ? 'var(--red)' : v < 15 ? '#8A6D00' : '#2E7D32';
-  const bg = v < 0 ? 'var(--tint-red)' : v < 15 ? '#FFF3CD' : '#E3F3E4';
+function badgeRent(v: number, color: string) {
+  const bg = v < 0 ? 'var(--tint-red)' : color === '#2E7D32' ? '#E3F3E4' : color === '#8A6D00' ? '#FFF3CD' : 'var(--tint-red)';
   return (
-    <span style={{ background: bg, color, padding: '2px 7px', borderRadius: 7, fontWeight: 700, fontSize: 11.5, whiteSpace: 'nowrap' }}>
+    <span style={{ background: bg, color, padding: '2px 7px', borderRadius: 7, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>
       {v.toFixed(1)}%
     </span>
   );
@@ -134,43 +143,35 @@ export default function PuntosCanjePage() {
   const mesActualNombre = MESES[hoy.getMonth()];
   const mesAnteriorNombre = MESES[(hoy.getMonth() + 11) % 12];
 
-  // Configuración
+  const [pestana, setPestana] = useState<Pestana>('premios');
+  const [cargando, setCargando] = useState(true);
+
+  // Ajustes del programa
   const [montoPorPunto, setMontoPorPunto] = useState(100000);
   const [montoEdit, setMontoEdit] = useState('100000');
-  const [rentBase, setRentBase] = useState(50);
-  const [rentBaseEdit, setRentBaseEdit] = useState('50');
   const [tope, setTope] = useState(2.5);
   const [topeEdit, setTopeEdit] = useState('2.5');
   const [guardandoConfig, setGuardandoConfig] = useState(false);
-  const [panelConfigAbierto, setPanelConfigAbierto] = useState(false);
-  const [baseCosto, setBaseCosto] = useState<'completo' | 'materia_prima'>('completo');
 
-  // Catálogo
+  // Premios
   const [catalogo, setCatalogo] = useState<ItemCatalogo[]>([]);
   const [productos, setProductos] = useState<ProductoBase[]>([]);
+  const [listaTroya, setListaTroya] = useState<ListaTroya | null>(null);
   const [stockPorProducto, setStockPorProducto] = useState<Record<string, StockFila>>({});
   const [busquedaCatalogo, setBusquedaCatalogo] = useState('');
+  const [subiendoFotoId, setSubiendoFotoId] = useState<string | null>(null);
 
-  // Formulario de premio (alta y edición)
-  const [panelItemAbierto, setPanelItemAbierto] = useState(false);
-  const [formId, setFormId] = useState<string | null>(null);
-  const [formProductoId, setFormProductoId] = useState('');
-  const [formNombre, setFormNombre] = useState('');
-  const [formCodigo, setFormCodigo] = useState('');
-  const [formPuntos, setFormPuntos] = useState('');
-  const [formCostoManual, setFormCostoManual] = useState('');
-  const [formFotoUrl, setFormFotoUrl] = useState('');
-  const [formFoto, setFormFoto] = useState<File | null>(null);
-  const [formFotoPreview, setFormFotoPreview] = useState('');
-  const [guardandoItem, setGuardandoItem] = useState(false);
-  const fotoInputRef = useRef<HTMLInputElement>(null);
-  const panelItemRef = useRef<HTMLDivElement>(null);
+  // Sumar premio
+  const [nuevoProducto, setNuevoProducto] = useState('');
+  const [nuevoPuntos, setNuevoPuntos] = useState('');
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [nuevoCodigo, setNuevoCodigo] = useState('');
+  const [nuevoCosto, setNuevoCosto] = useState('');
+  const [agregando, setAgregando] = useState(false);
 
-  // Placa del mes
-  const [panelPlacaAbierto, setPanelPlacaAbierto] = useState(false);
+  // Placa
   const [tituloPlaca, setTituloPlaca] = useState('BENEFICIOS PUNTO TROYA');
   const [mensajePlaca, setMensajePlaca] = useState('¡Felicitaciones por tus Puntos Troya! Canjealos por uno de estos premios.');
-  const [aclaracionPlaca, setAclaracionPlaca] = useState('El premio se añade sin costo a tu próxima orden dentro del mes corriente.');
   const [mesPlaca, setMesPlaca] = useState(() => MESES[new Date().getMonth()].toUpperCase());
   const [generando, setGenerando] = useState(false);
   const placaRef = useRef<HTMLDivElement>(null);
@@ -181,24 +182,19 @@ export default function PuntosCanjePage() {
   const [canjeandoId, setCanjeandoId] = useState<string | null>(null);
   const [itemSeleccionado, setItemSeleccionado] = useState('');
 
-  const [cargando, setCargando] = useState(true);
-
   async function cargarTodo() {
     setCargando(true);
 
     const { data: configData } = await supabase
       .from('configuracion')
       .select('clave, valor')
-      .in('clave', ['monto_por_punto', 'rentabilidad_base_ventas', 'tope_costo_programa']);
+      .in('clave', ['monto_por_punto', 'tope_costo_programa']);
     const cfg: Record<string, string> = {};
     (configData ?? []).forEach((c: any) => { cfg[c.clave] = c.valor; });
 
     const monto = cfg.monto_por_punto ? Number(cfg.monto_por_punto) : 100000;
     setMontoPorPunto(monto);
     setMontoEdit(String(monto));
-    const rb = cfg.rentabilidad_base_ventas ? Number(cfg.rentabilidad_base_ventas) : 50;
-    setRentBase(rb);
-    setRentBaseEdit(String(rb));
     const tp = cfg.tope_costo_programa ? Number(cfg.tope_costo_programa) : 2.5;
     setTope(tp);
     setTopeEdit(String(tp));
@@ -208,9 +204,15 @@ export default function PuntosCanjePage() {
 
     const { data: productosData } = await supabase
       .from('productos')
-      .select('id, nombre, codigo, costo_completo, costo_materia_prima')
+      .select('id, nombre, codigo, costo_completo, precio_lista')
       .order('nombre');
     setProductos(productosData ?? []);
+
+    // La rentabilidad base sale de Costos y Precios: se usa la lista Punto Troya
+    const { data: listasData } = await supabase.from('listas_precio').select('codigo, nombre, descuento_porcentaje');
+    const listas: any[] = listasData ?? [];
+    const lt = listas.find((l) => l.codigo === 'punto_troya') ?? listas.find((l) => String(l.nombre).toLowerCase().includes('troya'));
+    setListaTroya(lt ? { nombre: lt.nombre, descuento_porcentaje: Number(lt.descuento_porcentaje) } : null);
 
     if (puedeVer('stock')) {
       const { data: stockData } = await supabase.from('stock').select('producto_id, stock_rafaela, stock_centro_logistico');
@@ -275,7 +277,6 @@ export default function PuntosCanjePage() {
       { clave: 'monto_por_punto', valor: montoEdit || '100000', descripcion: 'Pesos de compra sin IVA necesarios para sumar 1 punto' },
     ];
     if (puedeVerCostos) {
-      filas.push({ clave: 'rentabilidad_base_ventas', valor: rentBaseEdit || '0', descripcion: 'Rentabilidad promedio de las ventas, para calcular la rentabilidad final de cada premio de canje' });
       filas.push({ clave: 'tope_costo_programa', valor: topeEdit || '0', descripcion: 'Costo máximo del programa de canje, como porcentaje de la compra que genera los puntos' });
     }
     const { error } = await supabase.from('configuracion').upsert(filas, { onConflict: 'clave' });
@@ -284,95 +285,63 @@ export default function PuntosCanjePage() {
       alert('Error al guardar: ' + error.message);
       return;
     }
-    setPanelConfigAbierto(false);
     cargarTodo();
   }
 
-  function seleccionarProducto(id: string) {
-    setFormProductoId(id);
-    const p = productos.find((x) => x.id === id);
-    if (p) {
-      setFormNombre(p.nombre);
-      setFormCodigo(p.codigo ?? '');
-    }
-  }
-
-  function limpiarFormulario() {
-    setFormId(null);
-    setFormProductoId('');
-    setFormNombre('');
-    setFormCodigo('');
-    setFormPuntos('');
-    setFormCostoManual('');
-    setFormFotoUrl('');
-    setFormFoto(null);
-    setFormFotoPreview('');
-    if (fotoInputRef.current) fotoInputRef.current.value = '';
-  }
-
-  function abrirNuevoItem() {
-    limpiarFormulario();
-    setPanelItemAbierto(true);
-  }
-
-  function cerrarItem() {
-    limpiarFormulario();
-    setPanelItemAbierto(false);
-  }
-
-  function abrirEdicionItem(item: ItemCatalogo) {
-    setFormId(item.id);
-    setFormProductoId(item.producto_id ?? '');
-    setFormNombre(item.nombre);
-    setFormCodigo(item.codigo ?? '');
-    setFormPuntos(String(item.puntos_requeridos));
-    setFormCostoManual(item.costo_manual != null ? String(item.costo_manual) : '');
-    setFormFotoUrl(item.foto_url ?? '');
-    setFormFoto(null);
-    setFormFotoPreview('');
-    setPanelItemAbierto(true);
-    setTimeout(() => panelItemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-  }
-
-  function elegirFoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const archivo = e.target.files?.[0] ?? null;
-    setFormFoto(archivo);
-    setFormFotoPreview(archivo ? URL.createObjectURL(archivo) : '');
-  }
-
-  async function guardarItem(e: React.FormEvent) {
+  async function agregarPremio(e: React.FormEvent) {
     e.preventDefault();
-    if (!formNombre.trim() || !formPuntos) return;
-
-    setGuardandoItem(true);
-    try {
-      let fotoUrl = formFotoUrl;
-      if (formFoto) fotoUrl = await subirFoto(formFoto);
-
-      const datos = {
-        nombre: formNombre.trim(),
-        puntos_requeridos: Number(formPuntos),
-        producto_id: formProductoId || null,
-        codigo: formCodigo.trim() || null,
-        costo_manual: formProductoId ? null : formCostoManual ? Number(formCostoManual) : null,
-        foto_url: fotoUrl || null,
-      };
-
-      if (formId) {
-        const { error } = await supabase.from('catalogo_canje').update(datos).eq('id', formId);
-        if (error) throw new Error(error.message);
-      } else {
-        const { error } = await supabase.from('catalogo_canje').insert(datos);
-        if (error) throw new Error(error.message);
-      }
-
-      cerrarItem();
-      cargarTodo();
-    } catch (err: any) {
-      alert('Error al guardar el premio: ' + err.message);
-    } finally {
-      setGuardandoItem(false);
+    const puntos = Math.round(Number(nuevoPuntos));
+    if (!nuevoProducto) {
+      alert('Elegí un producto de la lista.');
+      return;
     }
+    if (!puntos || puntos <= 0) {
+      alert('Poné cuántos puntos cuesta el premio.');
+      return;
+    }
+
+    let datos: any;
+    if (nuevoProducto === OTRO) {
+      if (!nuevoNombre.trim()) {
+        alert('Escribí el nombre del premio.');
+        return;
+      }
+      datos = {
+        nombre: nuevoNombre.trim(),
+        puntos_requeridos: puntos,
+        producto_id: null,
+        codigo: nuevoCodigo.trim() || null,
+        costo_manual: nuevoCosto ? Number(nuevoCosto) : null,
+        activo: false,
+      };
+    } else {
+      const p = productos.find((x) => x.id === nuevoProducto);
+      if (!p) return;
+      datos = {
+        nombre: p.nombre,
+        puntos_requeridos: puntos,
+        producto_id: p.id,
+        codigo: p.codigo,
+        costo_manual: null,
+        activo: false,
+      };
+    }
+
+    setAgregando(true);
+    const { error } = await supabase.from('catalogo_canje').insert(datos);
+    setAgregando(false);
+
+    if (error) {
+      alert('Error al agregar el premio: ' + error.message);
+      return;
+    }
+
+    setNuevoProducto('');
+    setNuevoPuntos('');
+    setNuevoNombre('');
+    setNuevoCodigo('');
+    setNuevoCosto('');
+    cargarTodo();
   }
 
   async function toggleActivo(item: ItemCatalogo) {
@@ -382,6 +351,54 @@ export default function PuntosCanjePage() {
       return;
     }
     setCatalogo((prev) => prev.map((i) => (i.id === item.id ? { ...i, activo: !i.activo } : i)));
+  }
+
+  async function guardarPuntos(item: ItemCatalogo, input: HTMLInputElement) {
+    const puntos = Math.round(Number(input.value));
+    if (!puntos || puntos <= 0) {
+      input.value = String(item.puntos_requeridos);
+      return;
+    }
+    if (puntos === item.puntos_requeridos) return;
+
+    const { error } = await supabase.from('catalogo_canje').update({ puntos_requeridos: puntos }).eq('id', item.id);
+    if (error) {
+      alert('Error al guardar los puntos: ' + error.message);
+      input.value = String(item.puntos_requeridos);
+      return;
+    }
+    setCatalogo((prev) => prev.map((i) => (i.id === item.id ? { ...i, puntos_requeridos: puntos } : i)));
+  }
+
+  async function guardarCostoManual(item: ItemCatalogo, input: HTMLInputElement) {
+    const valor = input.value.trim() === '' ? null : Number(input.value);
+    if (valor !== null && (isNaN(valor) || valor < 0)) {
+      input.value = item.costo_manual != null ? String(item.costo_manual) : '';
+      return;
+    }
+    if (valor === item.costo_manual) return;
+
+    const { error } = await supabase.from('catalogo_canje').update({ costo_manual: valor }).eq('id', item.id);
+    if (error) {
+      alert('Error al guardar el costo: ' + error.message);
+      return;
+    }
+    setCatalogo((prev) => prev.map((i) => (i.id === item.id ? { ...i, costo_manual: valor } : i)));
+  }
+
+  async function cambiarFoto(item: ItemCatalogo, archivo: File | undefined) {
+    if (!archivo) return;
+    setSubiendoFotoId(item.id);
+    try {
+      const url = await subirFoto(archivo);
+      const { error } = await supabase.from('catalogo_canje').update({ foto_url: url }).eq('id', item.id);
+      if (error) throw new Error(error.message);
+      setCatalogo((prev) => prev.map((i) => (i.id === item.id ? { ...i, foto_url: url } : i)));
+    } catch (err: any) {
+      alert('No se pudo subir la foto: ' + err.message);
+    } finally {
+      setSubiendoFotoId(null);
+    }
   }
 
   async function eliminarItemCatalogo(item: ItemCatalogo) {
@@ -449,12 +466,11 @@ export default function PuntosCanjePage() {
 
   if (cargando) return <p className="troya-subtitulo">Cargando...</p>;
 
-  // ---------- Cálculos del catálogo ----------
+  // ---------- Cálculos ----------
   function costoDeItem(item: ItemCatalogo): number {
     if (item.producto_id) {
       const p = productos.find((x) => x.id === item.producto_id);
-      if (!p) return 0;
-      return (baseCosto === 'completo' ? p.costo_completo : p.costo_materia_prima) ?? 0;
+      return p?.costo_completo ?? 0;
     }
     return item.costo_manual ?? 0;
   }
@@ -462,8 +478,27 @@ export default function PuntosCanjePage() {
   function colorCostoPct(v: number) {
     if (v <= tope) return '#2E7D32';
     if (v <= tope * 2) return '#8A6D00';
-    return 'var(--red)';
+    return '#DA231F';
   }
+
+  // Rentabilidad base: promedio de la rentabilidad de todos los productos de Costos y Precios,
+  // vendidos al precio de la lista Punto Troya y con su costo completo.
+  let rentBase: number | null = null;
+  let productosParaRent = 0;
+  if (listaTroya) {
+    const rents = productos
+      .filter((p) => (p.precio_lista ?? 0) > 0 && (p.costo_completo ?? 0) > 0)
+      .map((p) => {
+        const precioVenta = (p.precio_lista as number) * (1 - listaTroya.descuento_porcentaje / 100);
+        return precioVenta > 0 ? ((precioVenta - (p.costo_completo as number)) / precioVenta) * 100 : 0;
+      });
+    productosParaRent = rents.length;
+    if (rents.length > 0) rentBase = rents.reduce((a, b) => a + b, 0) / rents.length;
+  }
+
+  const configCambio = montoEdit !== String(montoPorPunto) || topeEdit !== String(tope);
+
+  const productosDisponibles = productos.filter((p) => !catalogo.some((c) => c.producto_id === p.id));
 
   const catalogoFiltrado = catalogo.filter((i) => {
     const texto = busquedaCatalogo.trim().toLowerCase();
@@ -481,13 +516,13 @@ export default function PuntosCanjePage() {
   }));
 
   const columnas: { key: string; w: number }[] = [
-    { key: 'sel', w: 6 },
-    { key: 'cod', w: 8 },
-    { key: 'premio', w: 28 },
-    { key: 'pts', w: 9 },
-    ...(puedeVerCostos ? [{ key: 'costo', w: 10 }, { key: 'costopct', w: 9 }, { key: 'rent', w: 10 }] : []),
+    { key: 'sel', w: 8 },
+    { key: 'foto', w: 9 },
+    { key: 'premio', w: 30 },
+    { key: 'pts', w: 10 },
+    ...(puedeVerCostos ? [{ key: 'costo', w: 11 }, { key: 'rent', w: 12 }] : []),
     ...(puedeVerStock ? [{ key: 'sraf', w: 8 }, { key: 'scl', w: 8 }] : []),
-    ...(puedeEditarModulo ? [{ key: 'acc', w: 11 }] : []),
+    ...(puedeEditarModulo ? [{ key: 'acc', w: 6 }] : []),
   ];
   const totalAncho = columnas.reduce((acc, c) => acc + c.w, 0);
   const anchoCol = (key: string) => `${(((columnas.find((c) => c.key === key)?.w ?? 0) / totalAncho) * 100).toFixed(2)}%`;
@@ -498,285 +533,327 @@ export default function PuntosCanjePage() {
     return [s.nombre, s.localidad, s.provincia].filter(Boolean).some((c) => c!.toLowerCase().includes(texto));
   });
 
+  const pestanas: { id: Pestana; label: string }[] = [
+    { id: 'premios', label: '1. Premios y puntos' },
+    ...(puedeEditarModulo ? [{ id: 'placa' as Pestana, label: '2. Placa del mes' }] : []),
+    { id: 'saldos', label: puedeEditarModulo ? '3. Saldos y canjes' : 'Saldos' },
+  ];
+
+  const labelAjuste: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, flexWrap: 'wrap' };
+
   return (
     <div>
       <div className="troya-header">
         <div>
           <h1>Puntos y Canje</h1>
-          <p className="troya-subtitulo">
-            1 punto cada {money(montoPorPunto)} de compra sin IVA · se canjea el mes siguiente y no se acumula
-            {!puedeEditarModulo && ' · Solo lectura'}
-          </p>
+          <p className="troya-subtitulo">Premios del programa y saldo de cada cliente{!puedeEditarModulo && ' · Solo lectura'}</p>
         </div>
       </div>
 
-      {/* CONFIGURACIÓN */}
-      {puedeEditarModulo && (
-        <div className="troya-panel" style={{ marginBottom: 20 }}>
-          <button className={`troya-panel-toggle ${panelConfigAbierto ? 'abierto' : ''}`} onClick={() => setPanelConfigAbierto(!panelConfigAbierto)}>
-            Configuración del programa
-            <IconMas />
+      {/* PESTAÑAS */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 22 }}>
+        {pestanas.map((t) => (
+          <button
+            key={t.id}
+            className="troya-btn"
+            style={pestana === t.id ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
+            onClick={() => setPestana(t.id)}
+          >
+            {t.label}
           </button>
-          {panelConfigAbierto && (
-            <div className="troya-panel-body">
-              <div className="troya-form">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, flexWrap: 'wrap' }}>
-                  Pesos de compra por 1 punto:
-                  <input className="troya-input" style={{ flex: '0 0 150px' }} type="number" value={montoEdit} onChange={(e) => setMontoEdit(e.target.value)} />
-                </label>
-                {puedeVerCostos && (
-                  <>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, flexWrap: 'wrap' }}>
-                      Rentabilidad base de las ventas (%):
-                      <input className="troya-input" style={{ flex: '0 0 100px' }} type="number" value={rentBaseEdit} onChange={(e) => setRentBaseEdit(e.target.value)} />
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, flexWrap: 'wrap' }}>
-                      Costo máximo del programa (% de la compra):
-                      <input className="troya-input" style={{ flex: '0 0 100px' }} type="number" step="0.1" value={topeEdit} onChange={(e) => setTopeEdit(e.target.value)} />
-                    </label>
-                  </>
-                )}
-                <button className="troya-btn" onClick={guardarConfig} disabled={guardandoConfig}>
-                  {guardandoConfig ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
+        ))}
+      </div>
+
+      {/* ============ PESTAÑA 1: PREMIOS ============ */}
+      {pestana === 'premios' && (
+        <div>
+          <p style={{ fontSize: 14, margin: '0 0 14px', color: 'var(--ink)' }}>
+            <strong>Tildá los premios que salen este mes.</strong> Los tildados van a la placa y son los únicos que se pueden canjear.
+          </p>
+
+          {/* AJUSTES DEL PROGRAMA */}
+          {puedeEditarModulo ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center', background: 'var(--tint-orange)', borderRadius: 12, padding: '12px 16px', marginBottom: 10 }}>
+              <label style={labelAjuste}>
+                1 punto cada $
+                <input className="troya-input" style={{ flex: '0 0 110px', padding: '7px 10px' }} type="number" value={montoEdit} onChange={(e) => setMontoEdit(e.target.value)} />
+                de compra sin IVA
+              </label>
               {puedeVerCostos && (
-                <p className="troya-subtitulo" style={{ marginTop: 10, marginBottom: 0 }}>
-                  Rentabilidad final de un premio = rentabilidad base menos lo que te cuesta el premio como porcentaje de la compra que lo genera.
-                  El costo máximo se usa para sugerirte los puntos mínimos de cada premio.
-                </p>
+                <label style={labelAjuste}>
+                  Gastar como máximo
+                  <input className="troya-input" style={{ flex: '0 0 70px', padding: '7px 10px' }} type="number" step="0.1" value={topeEdit} onChange={(e) => setTopeEdit(e.target.value)} />
+                  % de la compra en premios
+                </label>
+              )}
+              {configCambio && (
+                <button className="troya-btn" onClick={guardarConfig} disabled={guardandoConfig}>
+                  {guardandoConfig ? 'Guardando...' : 'Guardar ajustes'}
+                </button>
               )}
             </div>
+          ) : (
+            <p className="troya-subtitulo" style={{ marginBottom: 10 }}>1 punto cada {money(montoPorPunto)} de compra sin IVA. Los puntos se canjean el mes siguiente y no se acumulan.</p>
+          )}
+
+          {puedeVerCostos && (
+            <p style={{ fontSize: 13.5, margin: '0 0 16px' }}>
+              Tus ventas a Punto Troya rinden <strong>{rentBase !== null ? `${rentBase.toFixed(1)}%` : '—'}</strong>
+              <span style={{ color: 'var(--muted)' }}>
+                {rentBase !== null && listaTroya
+                  ? ` en promedio (calculado desde Costos y Precios: lista ${listaTroya.nombre} con ${listaTroya.descuento_porcentaje}% de descuento, ${productosParaRent} productos con costo y precio cargados).`
+                  : listaTroya
+                    ? ' (todavía no hay productos con costo y precio de lista cargados en Costos y Precios).'
+                    : ' (no encontré la lista Punto Troya en Costos y Precios).'}
+              </span>
+            </p>
+          )}
+
+          {/* SUMAR PREMIO */}
+          {puedeEditarModulo && (
+            <form onSubmit={agregarPremio} style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 14, padding: '14px 16px', marginBottom: 18 }}>
+              <p style={{ fontSize: 13.5, fontWeight: 700, margin: '0 0 10px' }}>Sumar un premio</p>
+              <div className="troya-form" style={{ paddingTop: 0 }}>
+                <select className="troya-input" style={{ flex: '2 1 260px' }} value={nuevoProducto} onChange={(e) => setNuevoProducto(e.target.value)}>
+                  <option value="">Elegí un producto...</option>
+                  {productosDisponibles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.codigo ? `${p.codigo} - ` : ''}{p.nombre}</option>
+                  ))}
+                  <option value={OTRO}>Otro premio (no está en la lista)</option>
+                </select>
+                {nuevoProducto === OTRO && (
+                  <>
+                    <input className="troya-input" style={{ flex: '2 1 200px' }} placeholder="Nombre del premio" value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
+                    <input className="troya-input" style={{ flex: '0 0 110px' }} placeholder="Código" value={nuevoCodigo} onChange={(e) => setNuevoCodigo(e.target.value)} />
+                    <input className="troya-input" style={{ flex: '0 0 150px' }} type="number" placeholder="Te cuesta ($)" value={nuevoCosto} onChange={(e) => setNuevoCosto(e.target.value)} />
+                  </>
+                )}
+                <input className="troya-input" style={{ flex: '0 0 110px' }} type="number" placeholder="Puntos" value={nuevoPuntos} onChange={(e) => setNuevoPuntos(e.target.value)} />
+                <button type="submit" className="troya-btn" disabled={agregando}>{agregando ? 'Agregando...' : 'Agregar'}</button>
+              </div>
+            </form>
+          )}
+
+          {/* BUSCADOR + IR A LA PLACA */}
+          {catalogo.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+              <div className="troya-buscador" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
+                <IconBuscar />
+                <input type="text" placeholder="Buscar premio..." value={busquedaCatalogo} onChange={(e) => setBusquedaCatalogo(e.target.value)} />
+              </div>
+              {puedeEditarModulo && (
+                <button className="troya-btn" onClick={() => setPestana('placa')}>
+                  Armar placa con {activos.length} premio{activos.length === 1 ? '' : 's'} →
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* TABLA */}
+          {catalogo.length === 0 ? (
+            <div className="troya-vacio">
+              <h3>Todavía no sumaste premios</h3>
+              <p>{puedeEditarModulo ? 'Elegí un producto arriba, ponele los puntos y tocá Agregar.' : 'Todavía no hay premios en el catálogo.'}</p>
+            </div>
+          ) : catalogoFiltrado.length === 0 ? (
+            <div className="troya-vacio">
+              <h3>No hay resultados para &ldquo;{busquedaCatalogo}&rdquo;</h3>
+            </div>
+          ) : (
+            <div className="troya-matriz-wrapper">
+              <table className="troya-matriz-tabla troya-matriz-tabla--compacta">
+                <colgroup>
+                  {columnas.map((c) => (
+                    <col key={c.key} style={{ width: anchoCol(c.key) }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Este mes</th>
+                    <th>Foto</th>
+                    <th>Premio</th>
+                    <th>Puntos</th>
+                    {puedeVerCostos && (
+                      <>
+                        <th>Te cuesta</th>
+                        <th>Rentab. final</th>
+                      </>
+                    )}
+                    {puedeVerStock && (
+                      <>
+                        <th>Stock Rafaela</th>
+                        <th>Stock C. Log.</th>
+                      </>
+                    )}
+                    {puedeEditarModulo && <th></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogoFiltrado.map((it) => {
+                    const costo = costoDeItem(it);
+                    const sinCosto = costo <= 0;
+                    const compraNecesaria = it.puntos_requeridos * montoPorPunto;
+                    const costoPct = compraNecesaria > 0 ? (costo / compraNecesaria) * 100 : 0;
+                    const rentFinal = rentBase !== null ? rentBase - costoPct : null;
+                    const minSanos = tope > 0 && montoPorPunto > 0 ? Math.ceil(costo / ((tope / 100) * montoPorPunto)) : 0;
+                    const stock = it.producto_id ? stockPorProducto[it.producto_id] : undefined;
+
+                    return (
+                      <tr key={it.id} style={it.activo ? { background: '#FFF8F3' } : undefined}>
+                        <td>
+                          {puedeEditarModulo ? (
+                            <input type="checkbox" style={{ width: 18, height: 18 }} checked={it.activo} onChange={() => toggleActivo(it)} title="Incluir este mes" />
+                          ) : (
+                            it.activo ? '✓' : '—'
+                          )}
+                        </td>
+                        <td>
+                          {puedeEditarModulo ? (
+                            <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="Cambiar foto">
+                              {subiendoFotoId === it.id ? (
+                                <span style={{ fontSize: 11, color: 'var(--muted)' }}>Subiendo...</span>
+                              ) : it.foto_url ? (
+                                <img src={it.foto_url} alt="" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 6, background: '#fff', border: '1px solid var(--line)' }} />
+                              ) : (
+                                <span style={{ fontSize: 12, color: 'var(--orange)', fontWeight: 700 }}>+ Foto</span>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                onChange={(e) => {
+                                  cambiarFoto(it, e.target.files?.[0]);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          ) : it.foto_url ? (
+                            <img src={it.foto_url} alt="" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 6, background: '#fff', border: '1px solid var(--line)' }} />
+                          ) : null}
+                        </td>
+                        <td>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.nombre}>{it.nombre}</div>
+                            {it.codigo && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{it.codigo}</div>}
+                          </div>
+                        </td>
+                        <td>
+                          {puedeEditarModulo ? (
+                            <input
+                              key={`${it.id}-${it.puntos_requeridos}`}
+                              className="troya-input"
+                              style={{ width: 70, padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}
+                              type="number"
+                              defaultValue={it.puntos_requeridos}
+                              onBlur={(e) => guardarPuntos(it, e.target)}
+                            />
+                          ) : (
+                            <strong>{it.puntos_requeridos}</strong>
+                          )}
+                        </td>
+                        {puedeVerCostos && (
+                          <>
+                            <td>
+                              {!it.producto_id && puedeEditarModulo ? (
+                                <input
+                                  key={`${it.id}-${it.costo_manual ?? ''}`}
+                                  className="troya-input"
+                                  style={{ width: 90, padding: '6px 8px' }}
+                                  type="number"
+                                  placeholder="$"
+                                  defaultValue={it.costo_manual ?? ''}
+                                  onBlur={(e) => guardarCostoManual(it, e.target)}
+                                />
+                              ) : sinCosto ? (
+                                '—'
+                              ) : (
+                                money(costo)
+                              )}
+                            </td>
+                            <td title={sinCosto ? '' : `Puntos mínimos sugeridos para este premio: ${minSanos}`}>
+                              {sinCosto ? (
+                                '—'
+                              ) : (
+                                <div>
+                                  {rentFinal !== null ? (
+                                    badgeRent(rentFinal, colorCostoPct(costoPct))
+                                  ) : (
+                                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>sin dato</span>
+                                  )}
+                                  <div style={{ fontSize: 10.5, color: colorCostoPct(costoPct), fontWeight: 600, marginTop: 2 }}>
+                                    {`−${costoPct.toFixed(1)} pts`}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          </>
+                        )}
+                        {puedeVerStock && (
+                          <>
+                            <td>{stock ? numero(stock.stock_rafaela) : '—'}</td>
+                            <td>{stock ? numero(stock.stock_centro_logistico) : '—'}</td>
+                          </>
+                        )}
+                        {puedeEditarModulo && (
+                          <td>
+                            <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarItemCatalogo(it)} title="Eliminar" style={{ width: 26, height: 26 }}>
+                              <IconTacho />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {puedeVerCostos && catalogo.length > 0 && (
+            <p className="troya-subtitulo" style={{ marginTop: 10 }}>
+              Rentab. final = lo que rinden en promedio tus ventas a Punto Troya (se calcula solo desde Costos y Precios) menos lo que te cuesta el premio. Debajo se ve cuántos puntos de rentabilidad te baja: verde si está dentro de tu máximo, amarillo si lo duplica, rojo si lo pasa. Si se pasa, subile los puntos al premio.
+            </p>
           )}
         </div>
       )}
 
-      {/* CATÁLOGO DE CANJE */}
-      <div className="troya-seccion">
-        <div className="troya-seccion-titulo">Catálogo de canje</div>
-        <p className="troya-subtitulo" style={{ marginTop: -6, marginBottom: 12 }}>
-          Tildá los premios de este mes: esos son los que salen en la placa y los únicos que se ofrecen al registrar un canje.
-        </p>
+      {/* ============ PESTAÑA 2: PLACA ============ */}
+      {pestana === 'placa' && puedeEditarModulo && (
+        <div>
+          <p style={{ fontSize: 14, margin: '0 0 14px' }}>
+            <strong>Revisá los textos y descargá la imagen</strong> para subir a historias o mandar por WhatsApp.
+          </p>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-          <div className="troya-buscador" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
-            <IconBuscar />
-            <input type="text" placeholder="Buscar premio por nombre o código..." value={busquedaCatalogo} onChange={(e) => setBusquedaCatalogo(e.target.value)} />
+          <div className="troya-form" style={{ paddingTop: 0 }}>
+            <input className="troya-input" style={{ flex: '2 1 240px' }} placeholder="Título" value={tituloPlaca} onChange={(e) => setTituloPlaca(e.target.value)} />
+            <input className="troya-input" style={{ flex: '3 1 320px' }} placeholder="Mensaje de felicitación" value={mensajePlaca} onChange={(e) => setMensajePlaca(e.target.value)} />
+            <input className="troya-input" style={{ flex: '0 0 170px' }} placeholder="Mes (ej: OCTUBRE)" value={mesPlaca} onChange={(e) => setMesPlaca(e.target.value.toUpperCase())} />
           </div>
-          {puedeVerCostos && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                className="troya-btn"
-                style={baseCosto === 'completo' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
-                onClick={() => setBaseCosto('completo')}
-              >
-                Costo completo
-              </button>
-              <button
-                className="troya-btn"
-                style={baseCosto === 'materia_prima' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
-                onClick={() => setBaseCosto('materia_prima')}
-              >
-                Solo materia prima
-              </button>
+
+          {premiosPlaca.length === 0 ? (
+            <div className="troya-vacio" style={{ marginTop: 18 }}>
+              <h3>Todavía no elegiste premios para este mes</h3>
+              <p>Volvé a Premios y puntos y tildá la casilla Este mes en los que quieras incluir.</p>
+              <button className="troya-btn" style={{ marginTop: 14 }} onClick={() => setPestana('premios')}>Ir a elegir premios</button>
             </div>
-          )}
-          {puedeEditarModulo && (
-            <button className="troya-btn" onClick={() => setPanelPlacaAbierto(true)}>
-              Generar placa del mes ({activos.length})
-            </button>
-          )}
-        </div>
-
-        {puedeEditarModulo && (
-          <div className="troya-panel" ref={panelItemRef}>
-            <button className={`troya-panel-toggle ${panelItemAbierto ? 'abierto' : ''}`} onClick={() => (panelItemAbierto ? cerrarItem() : abrirNuevoItem())}>
-              {formId ? 'Editando premio' : 'Nuevo premio canjeable'}
-              <IconMas />
-            </button>
-            {panelItemAbierto && (
-              <div className="troya-panel-body">
-                <form onSubmit={guardarItem}>
-                  <div className="troya-form">
-                    <select className="troya-input" value={formProductoId} onChange={(e) => seleccionarProducto(e.target.value)}>
-                      <option value="">Premio libre (no está en Costos y Precios)</option>
-                      {productos.map((p) => (
-                        <option key={p.id} value={p.id}>{p.codigo ? `${p.codigo} - ` : ''}{p.nombre}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="troya-form">
-                    <input className="troya-input" placeholder="Nombre del premio" value={formNombre} onChange={(e) => setFormNombre(e.target.value)} required />
-                    <input className="troya-input" style={{ flex: '0 0 130px' }} placeholder="Código" value={formCodigo} onChange={(e) => setFormCodigo(e.target.value)} />
-                    <input className="troya-input" style={{ flex: '0 0 130px' }} type="number" placeholder="Puntos" value={formPuntos} onChange={(e) => setFormPuntos(e.target.value)} required />
-                    {!formProductoId && (
-                      <input className="troya-input" style={{ flex: '0 0 170px' }} type="number" placeholder="Costo para vos ($)" value={formCostoManual} onChange={(e) => setFormCostoManual(e.target.value)} />
-                    )}
-                  </div>
-                  <div className="troya-form" style={{ alignItems: 'center' }}>
-                    <label style={{ fontSize: 13, color: 'var(--muted)' }}>Foto del premio:</label>
-                    <input ref={fotoInputRef} type="file" accept="image/*" onChange={elegirFoto} />
-                    {(formFotoPreview || formFotoUrl) && (
-                      <img
-                        src={formFotoPreview || formFotoUrl}
-                        alt=""
-                        style={{ width: 52, height: 52, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--line)', background: '#fff' }}
-                      />
-                    )}
-                  </div>
-                  <div className="troya-card-acciones" style={{ marginTop: 14 }}>
-                    <button type="submit" className="troya-btn" disabled={guardandoItem}>{guardandoItem ? 'Guardando...' : 'Guardar premio'}</button>
-                    <button type="button" className="troya-btn troya-btn-secundario" onClick={cerrarItem}>Cancelar</button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-        )}
-
-        {catalogo.length === 0 ? (
-          <div className="troya-vacio">
-            <h3>Todavía no hay premios cargados</h3>
-            <p>{puedeEditarModulo ? 'Agregá el primero desde Nuevo premio canjeable.' : 'Todavía no hay premios en el catálogo.'}</p>
-          </div>
-        ) : catalogoFiltrado.length === 0 ? (
-          <div className="troya-vacio">
-            <h3>No hay resultados para &ldquo;{busquedaCatalogo}&rdquo;</h3>
-          </div>
-        ) : (
-          <div className="troya-matriz-wrapper">
-            <table className="troya-matriz-tabla troya-matriz-tabla--compacta">
-              <colgroup>
-                {columnas.map((c) => (
-                  <col key={c.key} style={{ width: anchoCol(c.key) }} />
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '14px 0 6px', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>En la placa:</span>
+                {premiosPlaca.map((p) => (
+                  <span key={p.id} style={{ background: 'var(--tint-orange)', color: 'var(--ink)', borderRadius: 20, padding: '4px 12px', fontSize: 12.5, fontWeight: 600 }}>
+                    {p.nombre} · {p.puntos} pts
+                  </span>
                 ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Del mes</th>
-                  <th>Cód.</th>
-                  <th>Premio</th>
-                  <th>Puntos</th>
-                  {puedeVerCostos && (
-                    <>
-                      <th>Costo</th>
-                      <th>Costo % compra</th>
-                      <th>Rent. final</th>
-                    </>
-                  )}
-                  {puedeVerStock && (
-                    <>
-                      <th>Stock Rafaela</th>
-                      <th>Stock C. Log.</th>
-                    </>
-                  )}
-                  {puedeEditarModulo && <th></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {catalogoFiltrado.map((it) => {
-                  const costo = costoDeItem(it);
-                  const sinCosto = costo <= 0;
-                  const compraNecesaria = it.puntos_requeridos * montoPorPunto;
-                  const costoPct = compraNecesaria > 0 ? (costo / compraNecesaria) * 100 : 0;
-                  const rentFinal = rentBase - costoPct;
-                  const minSanos = tope > 0 && montoPorPunto > 0 ? Math.ceil(costo / ((tope / 100) * montoPorPunto)) : 0;
-                  const stock = it.producto_id ? stockPorProducto[it.producto_id] : undefined;
-
-                  return (
-                    <tr key={it.id} style={it.activo ? { background: '#FFF8F3' } : undefined}>
-                      <td>
-                        {puedeEditarModulo ? (
-                          <input type="checkbox" checked={it.activo} onChange={() => toggleActivo(it)} title="Incluir en la placa del mes" />
-                        ) : (
-                          it.activo ? '✓' : '—'
-                        )}
-                      </td>
-                      <td>{it.codigo ?? '—'}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          {it.foto_url && (
-                            <img
-                              src={it.foto_url}
-                              alt=""
-                              style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 6, background: '#fff', border: '1px solid var(--line)', flexShrink: 0 }}
-                            />
-                          )}
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }} title={it.nombre}>
-                            {it.nombre}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{ fontWeight: 700 }}>
-                        {it.puntos_requeridos}
-                        {puedeVerCostos && !sinCosto && minSanos > it.puntos_requeridos && (
-                          <div style={{ fontSize: 10.5, color: 'var(--red)', fontWeight: 600 }}>mín. {minSanos}</div>
-                        )}
-                      </td>
-                      {puedeVerCostos && (
-                        <>
-                          <td>{sinCosto ? '—' : money(costo)}</td>
-                          <td style={{ fontWeight: 700, color: sinCosto ? 'var(--muted)' : colorCostoPct(costoPct) }}>
-                            {sinCosto ? '—' : `${costoPct.toFixed(1)}%`}
-                          </td>
-                          <td>{sinCosto ? '—' : badgeRent(rentFinal)}</td>
-                        </>
-                      )}
-                      {puedeVerStock && (
-                        <>
-                          <td>{stock ? numero(stock.stock_rafaela) : '—'}</td>
-                          <td>{stock ? numero(stock.stock_centro_logistico) : '—'}</td>
-                        </>
-                      )}
-                      {puedeEditarModulo && (
-                        <td>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <button className="troya-icon-btn" onClick={() => abrirEdicionItem(it)} title="Editar" style={{ width: 26, height: 26 }}>
-                              <IconLapiz />
-                            </button>
-                            <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarItemCatalogo(it)} title="Eliminar" style={{ width: 26, height: 26 }}>
-                              <IconTacho />
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* PLACA DEL MES */}
-      {puedeEditarModulo && (
-        <div className="troya-panel" style={{ marginBottom: 28 }}>
-          <button className={`troya-panel-toggle ${panelPlacaAbierto ? 'abierto' : ''}`} onClick={() => setPanelPlacaAbierto(!panelPlacaAbierto)}>
-            Placa de premios del mes
-            <IconMas />
-          </button>
-          {panelPlacaAbierto && (
-            <div className="troya-panel-body">
-              <div className="troya-form">
-                <input className="troya-input" style={{ flex: '1 1 100%' }} placeholder="Título" value={tituloPlaca} onChange={(e) => setTituloPlaca(e.target.value)} />
-                <input className="troya-input" style={{ flex: '1 1 100%' }} placeholder="Mensaje de felicitación" value={mensajePlaca} onChange={(e) => setMensajePlaca(e.target.value)} />
-                <input className="troya-input" style={{ flex: '1 1 100%' }} placeholder="Aclaración" value={aclaracionPlaca} onChange={(e) => setAclaracionPlaca(e.target.value)} />
-                <input className="troya-input" style={{ flex: '0 0 200px' }} placeholder="Mes (ej: OCTUBRE)" value={mesPlaca} onChange={(e) => setMesPlaca(e.target.value.toUpperCase())} />
+                <button className="troya-btn troya-btn-secundario" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => setPestana('premios')}>Cambiar premios</button>
               </div>
-
-              {premiosPlaca.length === 0 && (
-                <p className="troya-subtitulo" style={{ marginTop: 12 }}>
-                  Todavía no hay premios del mes. Tildá la casilla Del mes de los premios que querés incluir y la placa se arma sola.
-                </p>
-              )}
               {activos.length > MAX_PREMIOS_PLACA && (
-                <p style={{ color: '#8A6D00', fontSize: 13, marginTop: 12 }}>
-                  Tenés {activos.length} premios tildados y en la placa entran {MAX_PREMIOS_PLACA}: salen los de más puntos. Destildá alguno para elegir cuáles incluir.
+                <p style={{ color: '#8A6D00', fontSize: 13, margin: '6px 0 0' }}>
+                  Tenés {activos.length} premios tildados y en la placa entran {MAX_PREMIOS_PLACA}: salen los de más puntos.
                 </p>
               )}
 
-              <button className="troya-btn" onClick={descargarPlaca} disabled={generando || premiosPlaca.length === 0} style={{ margin: '16px 0' }}>
+              <button className="troya-btn" onClick={descargarPlaca} disabled={generando} style={{ margin: '16px 0' }}>
                 {generando ? 'Generando...' : 'Descargar placa (PNG)'}
               </button>
 
@@ -785,89 +862,90 @@ export default function PuntosCanjePage() {
                   innerRef={placaRef}
                   titulo={tituloPlaca}
                   mensaje={mensajePlaca}
-                  aclaracion={aclaracionPlaca}
+                  aclaracion={ACLARACION}
                   mes={mesPlaca}
                   premios={premiosPlaca}
                 />
               </div>
-            </div>
+            </>
           )}
         </div>
       )}
 
-      {/* SALDO POR CLIENTE */}
-      <div className="troya-seccion">
-        <div className="troya-seccion-titulo">Saldo de puntos por cliente</div>
-        <p className="troya-subtitulo" style={{ marginTop: -6, marginBottom: 12 }}>
-          Puntos ganados con las compras de {mesAnteriorNombre}, canjeables durante {mesActualNombre}.
-        </p>
+      {/* ============ PESTAÑA 3: SALDOS ============ */}
+      {pestana === 'saldos' && (
+        <div>
+          <p style={{ fontSize: 14, margin: '0 0 14px' }}>
+            <strong>Puntos ganados con las compras de {mesAnteriorNombre}</strong>, canjeables durante {mesActualNombre}. No se acumulan.
+          </p>
 
-        <div className="troya-buscador">
-          <IconBuscar />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, localidad o provincia..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
-        </div>
+          <div className="troya-buscador">
+            <IconBuscar />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, localidad o provincia..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+          </div>
 
-        {saldos.length === 0 ? (
-          <div className="troya-vacio">
-            <h3>Todavía no hay Puntos Troya confirmados</h3>
-            <p>Cuando haya clientes activos con compras cargadas, su saldo va a aparecer acá.</p>
-          </div>
-        ) : saldosFiltrados.length === 0 ? (
-          <div className="troya-vacio">
-            <h3>No hay resultados para &ldquo;{busqueda}&rdquo;</h3>
-          </div>
-        ) : (
-          <div className="troya-lista">
-            {saldosFiltrados.map((s) =>
-              canjeandoId === s.punto_troya_id ? (
-                <div key={s.punto_troya_id} className="troya-card troya-card-editando">
-                  <h3>{s.nombre}</h3>
-                  <p className="troya-subtitulo" style={{ margin: 0 }}>Saldo disponible: {s.saldo} puntos</p>
-                  <div className="troya-form">
-                    <select className="troya-input" value={itemSeleccionado} onChange={(e) => setItemSeleccionado(e.target.value)}>
-                      <option value="">Elegir premio del mes...</option>
-                      {catalogo
-                        .filter((i) => i.activo && i.puntos_requeridos <= s.saldo)
-                        .map((i) => (
-                          <option key={i.id} value={i.id}>{i.nombre} — {i.puntos_requeridos} puntos</option>
-                        ))}
-                    </select>
-                  </div>
-                  <div className="troya-card-acciones">
-                    <button className="troya-btn" disabled={!itemSeleccionado} onClick={() => confirmarCanje(s.punto_troya_id)}>Confirmar canje</button>
-                    <button className="troya-btn troya-btn-secundario" onClick={() => setCanjeandoId(null)}>Cancelar</button>
-                  </div>
-                </div>
-              ) : (
-                <div key={s.punto_troya_id} className="troya-card">
-                  <div className="troya-card-info">
+          {saldos.length === 0 ? (
+            <div className="troya-vacio">
+              <h3>Todavía no hay Puntos Troya confirmados</h3>
+              <p>Cuando haya clientes activos con compras cargadas, su saldo va a aparecer acá.</p>
+            </div>
+          ) : saldosFiltrados.length === 0 ? (
+            <div className="troya-vacio">
+              <h3>No hay resultados para &ldquo;{busqueda}&rdquo;</h3>
+            </div>
+          ) : (
+            <div className="troya-lista">
+              {saldosFiltrados.map((s) =>
+                canjeandoId === s.punto_troya_id ? (
+                  <div key={s.punto_troya_id} className="troya-card troya-card-editando">
                     <h3>{s.nombre}</h3>
-                    <p>{[s.localidad, s.provincia].filter(Boolean).join(', ')}</p>
-                  </div>
-                  <div className="troya-card-derecha">
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="troya-saldo-puntos">{s.saldo}</div>
-                      <div className="troya-saldo-detalle">{s.puntosGanados} ganados en {mesAnteriorNombre} · {s.puntosCanjeados} canjeados este mes</div>
+                    <p className="troya-subtitulo" style={{ margin: 0 }}>Saldo disponible: {s.saldo} puntos</p>
+                    <div className="troya-form">
+                      <select className="troya-input" value={itemSeleccionado} onChange={(e) => setItemSeleccionado(e.target.value)}>
+                        <option value="">Elegir premio del mes...</option>
+                        {catalogo
+                          .filter((i) => i.activo && i.puntos_requeridos <= s.saldo)
+                          .map((i) => (
+                            <option key={i.id} value={i.id}>{i.nombre} — {i.puntos_requeridos} puntos</option>
+                          ))}
+                      </select>
                     </div>
-                    {puedeEditarModulo && (
-                      <div className="troya-card-acciones">
-                        <button className="troya-btn troya-btn-secundario" onClick={() => empezarCanje(s.punto_troya_id)} disabled={s.saldo <= 0}>
-                          Canjear
-                        </button>
-                      </div>
-                    )}
+                    <div className="troya-card-acciones">
+                      <button className="troya-btn" disabled={!itemSeleccionado} onClick={() => confirmarCanje(s.punto_troya_id)}>Confirmar canje</button>
+                      <button className="troya-btn troya-btn-secundario" onClick={() => setCanjeandoId(null)}>Cancelar</button>
+                    </div>
                   </div>
-                </div>
-              )
-            )}
-          </div>
-        )}
-      </div>
+                ) : (
+                  <div key={s.punto_troya_id} className="troya-card">
+                    <div className="troya-card-info">
+                      <h3>{s.nombre}</h3>
+                      <p>{[s.localidad, s.provincia].filter(Boolean).join(', ')}</p>
+                    </div>
+                    <div className="troya-card-derecha">
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="troya-saldo-puntos">{s.saldo}</div>
+                        <div className="troya-saldo-detalle">{s.puntosGanados} ganados en {mesAnteriorNombre} · {s.puntosCanjeados} canjeados este mes</div>
+                      </div>
+                      {puedeEditarModulo && (
+                        <div className="troya-card-acciones">
+                          <button className="troya-btn troya-btn-secundario" onClick={() => empezarCanje(s.punto_troya_id)} disabled={s.saldo <= 0}>
+                            Canjear
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -967,11 +1045,6 @@ function PlacaPremios({
               <div style={{ width: '24%', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 800 }}>{p.puntos}</div>
             </div>
           ))}
-          {n === 0 && (
-            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B5AAA0', fontSize: 14 }}>
-              Sin premios seleccionados
-            </div>
-          )}
         </div>
 
         <p style={{ fontSize: 12.5, textAlign: 'center', margin: '12px 0 0', color: '#EDE5DE', lineHeight: 1.4 }}>
@@ -994,30 +1067,13 @@ function PlacaPremios({
         </ol>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '14px -30px 0 -30px', height: 64, padding: '0 30px 0 0' }}>
-          <div style={{ background: '#DA231F', padding: '8px 30px 8px 30px', borderRadius: '0 26px 26px 0', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>
+          <div style={{ background: '#DA231F', padding: '8px 30px', borderRadius: '0 26px 26px 0', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>
             {mes}
           </div>
           <img src="/logo/logo_troya_blanco_transparente.png" alt="Troya" crossOrigin="anonymous" style={{ height: 34 }} />
         </div>
       </div>
     </div>
-  );
-}
-
-function IconMas() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function IconLapiz() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
-    </svg>
   );
 }
 
