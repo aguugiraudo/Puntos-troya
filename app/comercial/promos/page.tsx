@@ -1,484 +1,393 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
-
-const MODULO = 'promos';
 
 type Producto = {
   id: string;
   nombre: string;
-  costo_materia_prima: number | null;
+  codigo: string | null;
+  categoria: string | null;
   costo_completo: number | null;
+  costo_materia_prima: number | null;
+  precio_lista: number | null;
 };
 
-type PromoItem = {
-  clientId: string;
-  producto_id: string | null;
-  nombre_item: string;
-  cantidad: number;
-  costo_unitario_manual: number | null;
-  precio_unitario_promo: number | null;
-  es_regalo: boolean;
+type Item = {
+  key: string;
+  producto_id: string | null; // null = ítem extra (regalo / otro)
+  nombre: string;
+  cantidad: string;
+  precio_lista: number; // por unidad
+  descuento: string; // % sobre lista
+  precio_promo: string; // por unidad (se calcula del descuento, o se escribe a mano)
+  costo_completo: number;
+  costo_mp: number;
 };
 
 type Promo = {
   id: string;
   nombre: string;
-  tipo: 'combo_cerrado' | 'por_unidad';
-  precio_promocional: number | null;
+  tipo: 'por_unidad' | 'combo_cerrado';
+  precio_combo: number | null;
   activa: boolean;
+  items: Array<{
+    producto_id: string | null; nombre: string; cantidad: number; precio_lista: number;
+    descuento: number; precio_promo: number; costo_completo: number; costo_mp: number;
+  }>;
 };
 
-type PromoItemGuardado = {
-  id: string;
-  promo_id: string;
-  producto_id: string | null;
-  nombre_item: string;
-  cantidad: number;
-  costo_unitario_manual: number | null;
-  precio_unitario_promo: number | null;
-  es_regalo: boolean;
+const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-AR');
+const num = (s: string) => {
+  const v = parseFloat((s || '').replace(',', '.'));
+  return isNaN(v) ? 0 : v;
 };
+const redondear = (n: number) => Math.round(n);
+let contador = 0;
+const nuevaKey = () => `i${Date.now()}_${contador++}`;
 
-function money(v: number | null | undefined) {
-  return `$${(v ?? 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
-}
-
-function badgeRentabilidad(rentabilidad: number) {
-  const color = rentabilidad < 0 ? 'var(--red)' : rentabilidad < 15 ? '#8A6D00' : '#2E7D32';
-  const bg = rentabilidad < 0 ? 'var(--tint-red)' : rentabilidad < 15 ? '#FFF3CD' : '#E3F3E4';
-  return (
-    <span style={{ background: bg, color, padding: '3px 10px', borderRadius: 8, fontWeight: 700, fontSize: 13 }}>
-      {rentabilidad.toFixed(1)}%
-    </span>
-  );
-}
-
-function nuevoItem(): PromoItem {
-  return {
-    clientId: Math.random().toString(36).slice(2),
-    producto_id: null,
-    nombre_item: '',
-    cantidad: 1,
-    costo_unitario_manual: null,
-    precio_unitario_promo: null,
-    es_regalo: false,
-  };
+function colorRent(r: number) {
+  if (r >= 30) return '#2e7d32';
+  if (r >= 15) return '#b8860b';
+  return '#DA231F';
 }
 
 export default function PromosPage() {
   const { puedeVer, puedeEditar } = useAuth();
-  const puedeVerModulo = puedeVer(MODULO);
-  const puedeEditarModulo = puedeEditar(MODULO);
-
   const [productos, setProductos] = useState<Producto[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
-  const [itemsPorPromo, setItemsPorPromo] = useState<Record<string, PromoItemGuardado[]>>({});
   const [cargando, setCargando] = useState(true);
-  const [busqueda, setBusqueda] = useState('');
-  const [baseRentabilidad, setBaseRentabilidad] = useState<'completo' | 'materia_prima'>('completo');
+  const [error, setError] = useState('');
 
-  const [panelAbierto, setPanelAbierto] = useState(false);
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [nombreForm, setNombreForm] = useState('');
-  const [tipoForm, setTipoForm] = useState<'combo_cerrado' | 'por_unidad'>('combo_cerrado');
-  const [precioComboForm, setPrecioComboForm] = useState('');
-  const [itemsForm, setItemsForm] = useState<PromoItem[]>([nuevoItem()]);
+  const [editando, setEditando] = useState(false);
+  const [promoId, setPromoId] = useState<string | null>(null);
+  const [nombre, setNombre] = useState('');
+  const [tipo, setTipo] = useState<'por_unidad' | 'combo_cerrado'>('por_unidad');
+  const [precioCombo, setPrecioCombo] = useState('');
+  const [items, setItems] = useState<Item[]>([]);
+  const [descGlobal, setDescGlobal] = useState('');
+  const [usarMP, setUsarMP] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
-  async function cargarTodo() {
+  const editar = puedeEditar('promos');
+
+  async function cargar() {
     setCargando(true);
-
-    const { data: productosData } = await supabase.from('productos').select('id, nombre, costo_materia_prima, costo_completo').order('nombre');
-    setProductos(productosData ?? []);
-
-    const { data: promosData } = await supabase.from('promos').select('*').order('creado_en', { ascending: false });
-    setPromos(promosData ?? []);
-
-    const { data: itemsData } = await supabase.from('promo_items').select('*');
-    const mapa: Record<string, PromoItemGuardado[]> = {};
-    (itemsData ?? []).forEach((it) => {
-      if (!mapa[it.promo_id]) mapa[it.promo_id] = [];
-      mapa[it.promo_id].push(it);
-    });
-    setItemsPorPromo(mapa);
-
+    const [p, pr] = await Promise.all([
+      supabase.from('productos')
+        .select('id, nombre, codigo, categoria, costo_completo, costo_materia_prima, precio_lista')
+        .order('categoria').order('nombre'),
+      supabase.from('promos_v2').select('*, promos_v2_items(*)').order('created_at', { ascending: false }),
+    ]);
+    if (p.error) setError(p.error.message);
+    setProductos((p.data as Producto[]) || []);
+    if (pr.error) {
+      setError('No se pudo leer promos_v2. ¿Corriste el SQL? ' + pr.error.message);
+    } else {
+      setPromos(((pr.data as any[]) || []).map((x) => ({
+        id: x.id, nombre: x.nombre, tipo: x.tipo, precio_combo: x.precio_combo, activa: x.activa,
+        items: (x.promos_v2_items || []).sort((a: any, b: any) => (a.orden || 0) - (b.orden || 0)).map((i: any) => ({
+          producto_id: i.producto_id, nombre: i.nombre, cantidad: Number(i.cantidad) || 1,
+          precio_lista: Number(i.precio_lista) || 0, descuento: Number(i.descuento) || 0,
+          precio_promo: Number(i.precio_promo) || 0,
+          costo_completo: Number(i.costo_completo) || 0, costo_mp: Number(i.costo_mp) || 0,
+        })),
+      })));
+    }
     setCargando(false);
   }
+  useEffect(() => { cargar(); }, []);
 
-  useEffect(() => {
-    if (puedeVerModulo) cargarTodo();
-  }, [puedeVerModulo]);
+  const porCategoria = useMemo(() => {
+    const m: Record<string, Producto[]> = {};
+    productos.forEach((p) => { (m[p.categoria || 'Sin categoría'] ||= []).push(p); });
+    return m;
+  }, [productos]);
 
-  if (!puedeVerModulo) {
-    return (
-      <div className="troya-vacio">
-        <h3>No tenés acceso a esta sección</h3>
-        <p>Pedile al administrador que te habilite Promos desde el Panel de Accesos.</p>
-      </div>
-    );
+  function nueva() {
+    setPromoId(null); setNombre(''); setTipo('por_unidad'); setPrecioCombo('');
+    setItems([itemVacio()]); setDescGlobal(''); setEditando(true);
+  }
+  function itemVacio(): Item {
+    return { key: nuevaKey(), producto_id: null, nombre: '', cantidad: '1', precio_lista: 0, descuento: '0', precio_promo: '', costo_completo: 0, costo_mp: 0 };
+  }
+  function editarPromo(p: Promo) {
+    setPromoId(p.id); setNombre(p.nombre); setTipo(p.tipo);
+    setPrecioCombo(p.precio_combo ? String(p.precio_combo) : '');
+    setItems(p.items.map((i) => ({
+      key: nuevaKey(), producto_id: i.producto_id, nombre: i.nombre, cantidad: String(i.cantidad),
+      precio_lista: i.precio_lista, descuento: String(i.descuento), precio_promo: String(i.precio_promo),
+      costo_completo: i.costo_completo, costo_mp: i.costo_mp,
+    })));
+    setDescGlobal(''); setEditando(true);
   }
 
-  const promosFiltradas = promos.filter((p) => {
-    const texto = busqueda.trim().toLowerCase();
-    return !texto || p.nombre.toLowerCase().includes(texto);
-  });
-
-  function costoUnitario(item: { producto_id: string | null; costo_unitario_manual: number | null }) {
-    if (item.producto_id) {
-      const prod = productos.find((p) => p.id === item.producto_id);
-      if (!prod) return 0;
-      return (baseRentabilidad === 'completo' ? prod.costo_completo : prod.costo_materia_prima) ?? 0;
-    }
-    return item.costo_unitario_manual ?? 0;
+  function setItem(key: string, cambios: Partial<Item>) {
+    setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...cambios } : i)));
   }
-
-  function abrirNuevaPromo() {
-    setEditandoId(null);
-    setNombreForm('');
-    setTipoForm('combo_cerrado');
-    setPrecioComboForm('');
-    setItemsForm([nuevoItem()]);
-    setPanelAbierto(true);
-  }
-
-  function abrirEdicion(promo: Promo) {
-    setEditandoId(promo.id);
-    setNombreForm(promo.nombre);
-    setTipoForm(promo.tipo);
-    setPrecioComboForm(promo.precio_promocional != null ? String(promo.precio_promocional) : '');
-    const guardados = itemsPorPromo[promo.id] ?? [];
-    setItemsForm(
-      guardados.length > 0
-        ? guardados.map((it) => ({
-            clientId: it.id,
-            producto_id: it.producto_id,
-            nombre_item: it.nombre_item,
-            cantidad: Number(it.cantidad),
-            costo_unitario_manual: it.costo_unitario_manual,
-            precio_unitario_promo: it.precio_unitario_promo,
-            es_regalo: it.es_regalo,
-          }))
-        : [nuevoItem()]
-    );
-    setPanelAbierto(true);
-  }
-
-  function actualizarItem(clientId: string, cambios: Partial<PromoItem>) {
-    setItemsForm((prev) => prev.map((it) => (it.clientId === clientId ? { ...it, ...cambios } : it)));
-  }
-
-  function seleccionarProducto(clientId: string, productoId: string) {
-    const prod = productos.find((p) => p.id === productoId);
-    actualizarItem(clientId, {
-      producto_id: productoId || null,
-      nombre_item: prod?.nombre ?? '',
-      es_regalo: false,
-      costo_unitario_manual: null,
+  function elegirProducto(key: string, id: string) {
+    const p = productos.find((x) => x.id === id);
+    if (!p) { setItem(key, { producto_id: null, nombre: '', precio_lista: 0, costo_completo: 0, costo_mp: 0, precio_promo: '' }); return; }
+    const lista = p.precio_lista || 0;
+    setItem(key, {
+      producto_id: p.id, nombre: p.nombre, precio_lista: lista, descuento: '0',
+      precio_promo: String(lista), costo_completo: p.costo_completo || 0, costo_mp: p.costo_materia_prima || 0,
     });
   }
-
-  function agregarItem() {
-    setItemsForm((prev) => [...prev, nuevoItem()]);
+  function cambiarDescuento(key: string, d: string) {
+    const it = items.find((i) => i.key === key);
+    if (!it) return;
+    const precio = redondear(it.precio_lista * (1 - num(d) / 100));
+    setItem(key, { descuento: d, precio_promo: it.precio_lista ? String(precio) : it.precio_promo });
+  }
+  function cambiarPrecio(key: string, v: string) {
+    const it = items.find((i) => i.key === key);
+    if (!it) return;
+    let d = it.descuento;
+    if (it.precio_lista > 0) d = String(Math.round((1 - num(v) / it.precio_lista) * 1000) / 10);
+    setItem(key, { precio_promo: v, descuento: d });
+  }
+  function aplicarDescGlobal(d: string) {
+    setDescGlobal(d);
+    setItems((prev) => prev.map((i) => i.producto_id && i.precio_lista
+      ? { ...i, descuento: d, precio_promo: String(redondear(i.precio_lista * (1 - num(d) / 100))) }
+      : i));
+  }
+  function agregarExtra() {
+    setItems((prev) => [...prev, { ...itemVacio(), nombre: '', descuento: '0', precio_promo: '0' }].map((i, idx, arr) =>
+      idx === arr.length - 1 ? { ...i, producto_id: null, nombre: '__extra__' } : i));
   }
 
-  function quitarItem(clientId: string) {
-    setItemsForm((prev) => (prev.length > 1 ? prev.filter((it) => it.clientId !== clientId) : prev));
-  }
+  // ---- Cálculos ----
+  const filas = items.map((i) => {
+    const cant = num(i.cantidad);
+    const promoU = num(i.precio_promo);
+    const costoU = usarMP ? i.costo_mp : i.costo_completo;
+    return { ...i, cant, promoU, listaTotal: i.precio_lista * cant, promoTotal: promoU * cant, costoTotal: costoU * cant };
+  });
+  const totalLista = filas.reduce((a, f) => a + f.listaTotal, 0);
+  const totalCosto = filas.reduce((a, f) => a + f.costoTotal, 0);
+  const sumaPromoItems = filas.reduce((a, f) => a + f.promoTotal, 0);
+  const totalPromo = tipo === 'combo_cerrado' ? num(precioCombo) : sumaPromoItems;
+  const ganancia = totalPromo - totalCosto;
+  const rent = totalPromo > 0 ? (ganancia / totalPromo) * 100 : 0;
+  const descTotal = totalLista > 0 && totalPromo > 0 ? (1 - totalPromo / totalLista) * 100 : 0;
 
-  const costoTotalForm = itemsForm.reduce((acc, it) => acc + costoUnitario(it) * (it.cantidad || 0), 0);
-  const precioTotalForm =
-    tipoForm === 'combo_cerrado'
-      ? Number(precioComboForm) || 0
-      : itemsForm.reduce((acc, it) => acc + (it.precio_unitario_promo ?? 0) * (it.cantidad || 0), 0);
-  const rentabilidadForm = precioTotalForm > 0 ? ((precioTotalForm - costoTotalForm) / precioTotalForm) * 100 : 0;
-
-  async function guardarPromo(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nombreForm.trim()) return;
-    if (itemsForm.some((it) => !it.nombre_item.trim())) {
-      alert('Todos los ítems necesitan un producto elegido o un nombre (si es regalo/libre).');
-      return;
-    }
-
+  async function guardar() {
+    if (!nombre.trim()) { alert('Poné un nombre a la promo.'); return; }
+    const validos = items.filter((i) => (i.producto_id || (i.nombre && i.nombre !== '__extra__')) && num(i.cantidad) > 0);
+    if (!validos.length) { alert('Agregá al menos un ítem.'); return; }
     setGuardando(true);
-
-    try {
-      let promoId = editandoId;
-
-      if (editandoId) {
-        const { error } = await supabase
-          .from('promos')
-          .update({
-            nombre: nombreForm,
-            tipo: tipoForm,
-            precio_promocional: tipoForm === 'combo_cerrado' ? Number(precioComboForm) || 0 : null,
-          })
-          .eq('id', editandoId);
-        if (error) throw new Error(error.message);
-
-        await supabase.from('promo_items').delete().eq('promo_id', editandoId);
-      } else {
-        const { data: nueva, error } = await supabase
-          .from('promos')
-          .insert({
-            nombre: nombreForm,
-            tipo: tipoForm,
-            precio_promocional: tipoForm === 'combo_cerrado' ? Number(precioComboForm) || 0 : null,
-          })
-          .select('id')
-          .single();
-        if (error || !nueva) throw new Error(error?.message ?? 'No se pudo crear la promo');
-        promoId = nueva.id;
-      }
-
-      const filasItems = itemsForm.map((it) => ({
-        promo_id: promoId,
-        producto_id: it.producto_id,
-        nombre_item: it.nombre_item,
-        cantidad: it.cantidad || 1,
-        costo_unitario_manual: it.producto_id ? null : it.costo_unitario_manual,
-        precio_unitario_promo: tipoForm === 'por_unidad' ? it.precio_unitario_promo : null,
-        es_regalo: it.es_regalo,
-      }));
-
-      const { error: errorItems } = await supabase.from('promo_items').insert(filasItems);
-      if (errorItems) throw new Error(errorItems.message);
-
-      setPanelAbierto(false);
-      cargarTodo();
-    } catch (err: any) {
-      alert('Error al guardar: ' + err.message);
-    } finally {
-      setGuardando(false);
+    const cab = { nombre: nombre.trim(), tipo, precio_combo: tipo === 'combo_cerrado' ? num(precioCombo) : null };
+    let id = promoId;
+    if (id) {
+      const { error: e } = await supabase.from('promos_v2').update(cab).eq('id', id);
+      if (e) { alert(e.message); setGuardando(false); return; }
+      await supabase.from('promos_v2_items').delete().eq('promo_id', id);
+    } else {
+      const { data, error: e } = await supabase.from('promos_v2').insert({ ...cab, activa: true }).select('id').single();
+      if (e || !data) { alert(e?.message || 'Error'); setGuardando(false); return; }
+      id = data.id;
     }
+    const filasDb = validos.map((i, idx) => ({
+      promo_id: id, orden: idx, producto_id: i.producto_id, nombre: i.nombre,
+      cantidad: num(i.cantidad), precio_lista: i.precio_lista, descuento: num(i.descuento),
+      precio_promo: num(i.precio_promo), costo_completo: i.costo_completo, costo_mp: i.costo_mp,
+    }));
+    const { error: e2 } = await supabase.from('promos_v2_items').insert(filasDb);
+    if (e2) alert(e2.message);
+    setGuardando(false); setEditando(false); cargar();
+  }
+  async function alternar(p: Promo) {
+    await supabase.from('promos_v2').update({ activa: !p.activa }).eq('id', p.id); cargar();
+  }
+  async function eliminar(p: Promo) {
+    if (!confirm(`¿Eliminar la promo "${p.nombre}"?`)) return;
+    await supabase.from('promos_v2').delete().eq('id', p.id); cargar();
   }
 
-  async function toggleActiva(promo: Promo) {
-    const { error } = await supabase.from('promos').update({ activa: !promo.activa }).eq('id', promo.id);
-    if (error) { alert('Error: ' + error.message); return; }
-    cargarTodo();
-  }
+  if (!puedeVer('promos')) return <div className="troya-vacio">No tenés acceso a este módulo.</div>;
 
-  async function eliminarPromo(promo: Promo) {
-    const confirmado = confirm(`¿Eliminar la promo "${promo.nombre}"?`);
-    if (!confirmado) return;
-    const { error } = await supabase.from('promos').delete().eq('id', promo.id);
-    if (error) { alert('No se pudo eliminar: ' + error.message); return; }
-    cargarTodo();
-  }
+  const celda: React.CSSProperties = { padding: '6px 8px', verticalAlign: 'middle' };
+  const inp: React.CSSProperties = { width: '100%' };
 
   return (
     <div>
       <div className="troya-header">
         <div>
-          <h1>Promos</h1>
-          <p className="troya-subtitulo">{promos.length} promos armadas{!puedeEditarModulo && ' · Solo lectura'}</p>
+          <h1 style={{ fontFamily: 'var(--font-display)', margin: 0 }}>Promos</h1>
+          <p className="troya-subtitulo">Armá combos con precio de lista, descuento y rentabilidad en vivo.</p>
         </div>
+        {editar && !editando && <button className="troya-btn" onClick={nueva}>+ Nueva promo</button>}
       </div>
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        <button
-          className="troya-btn"
-          style={baseRentabilidad === 'completo' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
-          onClick={() => setBaseRentabilidad('completo')}
-        >
-          Rent. s/ costo completo
-        </button>
-        <button
-          className="troya-btn"
-          style={baseRentabilidad === 'materia_prima' ? {} : { background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)' }}
-          onClick={() => setBaseRentabilidad('materia_prima')}
-        >
-          Rent. s/ materia prima
-        </button>
-      </div>
+      {error && <div className="troya-vacio" style={{ color: 'var(--red)' }}>{error}</div>}
 
-      {puedeEditarModulo && (
-        <div className="troya-panel" style={{ marginBottom: 20 }}>
-          <button className={`troya-panel-toggle ${panelAbierto ? 'abierto' : ''}`} onClick={() => (panelAbierto ? setPanelAbierto(false) : abrirNuevaPromo())}>
-            {editandoId ? 'Editando promo' : 'Nueva promo'}
-            <IconMas />
-          </button>
-          {panelAbierto && (
-            <div className="troya-panel-body">
-              <form onSubmit={guardarPromo}>
-                <div className="troya-form">
-                  <input className="troya-input" placeholder="Nombre de la promo" value={nombreForm} onChange={(e) => setNombreForm(e.target.value)} required />
-                  <select className="troya-input" style={{ flex: '0 0 220px' }} value={tipoForm} onChange={(e) => setTipoForm(e.target.value as any)}>
-                    <option value="combo_cerrado">Precio único de combo</option>
-                    <option value="por_unidad">Precio especial por unidad</option>
-                  </select>
-                  {tipoForm === 'combo_cerrado' && (
-                    <input className="troya-input" style={{ flex: '0 0 180px' }} type="number" placeholder="Precio del combo" value={precioComboForm} onChange={(e) => setPrecioComboForm(e.target.value)} />
-                  )}
-                </div>
+      {editando && (
+        <div className="troya-card" style={{ padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12, marginBottom: 14 }}>
+            <label>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Nombre de la promo</div>
+              <input className="troya-input" style={inp} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Combo asador" />
+            </label>
+            <label>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Cómo se cobra</div>
+              <select className="troya-input" style={inp} value={tipo} onChange={(e) => setTipo(e.target.value as any)}>
+                <option value="por_unidad">Descuento por ítem (se suma cada precio)</option>
+                <option value="combo_cerrado">Precio único para todo el combo</option>
+              </select>
+            </label>
+            {tipo === 'combo_cerrado' ? (
+              <label>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Precio del combo ($)</div>
+                <input className="troya-input" style={inp} inputMode="decimal" value={precioCombo} onChange={(e) => setPrecioCombo(e.target.value)} placeholder="Precio final del combo" />
+              </label>
+            ) : (
+              <label>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Descuento a todos los productos (%)</div>
+                <input className="troya-input" style={inp} inputMode="decimal" value={descGlobal} onChange={(e) => aplicarDescGlobal(e.target.value)} placeholder="Ej: 15  (después ajustás uno por uno)" />
+              </label>
+            )}
+          </div>
 
-                <p style={{ fontSize: 13, fontWeight: 600, margin: '16px 0 8px' }}>Ítems de la promo</p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {itemsForm.map((it) => (
-                    <div key={it.clientId} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
-                      <div className="troya-form" style={{ paddingTop: 0, marginBottom: 8 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                          <input
-                            type="checkbox"
-                            checked={it.es_regalo}
-                            onChange={(e) => actualizarItem(it.clientId, { es_regalo: e.target.checked, producto_id: e.target.checked ? null : it.producto_id })}
-                          />
-                          Ítem libre / regalo (no está en el catálogo)
-                        </label>
-                      </div>
-
-                      <div className="troya-form" style={{ paddingTop: 0 }}>
-                        {it.es_regalo ? (
-                          <>
-                            <input
-                              className="troya-input"
-                              placeholder="Nombre del regalo/ítem"
-                              value={it.nombre_item}
-                              onChange={(e) => actualizarItem(it.clientId, { nombre_item: e.target.value })}
-                            />
-                            <input
-                              className="troya-input"
-                              style={{ flex: '0 0 160px' }}
-                              type="number"
-                              placeholder="Costo estimado (opcional)"
-                              value={it.costo_unitario_manual ?? ''}
-                              onChange={(e) => actualizarItem(it.clientId, { costo_unitario_manual: e.target.value ? Number(e.target.value) : null })}
-                            />
-                          </>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="troya-matriz-tabla" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', fontSize: 12, color: 'var(--muted)' }}>
+                  <th style={celda}>Producto</th>
+                  <th style={celda}>Cant.</th>
+                  <th style={celda}>Precio lista</th>
+                  {tipo === 'por_unidad' && <th style={celda}>Desc. %</th>}
+                  {tipo === 'por_unidad' && <th style={celda}>Precio promo</th>}
+                  <th style={celda}>{tipo === 'por_unidad' ? 'Subtotal promo' : 'Subtotal lista'}</th>
+                  <th style={celda}>Costo</th>
+                  <th style={celda}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f) => {
+                  const esExtra = !f.producto_id && f.nombre !== '' ;
+                  const sinElegir = !f.producto_id && f.nombre === '';
+                  return (
+                    <tr key={f.key} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td style={{ ...celda, minWidth: 220 }}>
+                        {esExtra ? (
+                          <input className="troya-input" style={inp} placeholder="Ej: Regalo – tabla de madera"
+                            value={f.nombre === '__extra__' ? '' : f.nombre}
+                            onChange={(e) => setItem(f.key, { nombre: e.target.value || '__extra__' })} />
                         ) : (
-                          <select className="troya-input" value={it.producto_id ?? ''} onChange={(e) => seleccionarProducto(it.clientId, e.target.value)}>
-                            <option value="">Elegir producto...</option>
-                            {productos.map((p) => (
-                              <option key={p.id} value={p.id}>{p.nombre}</option>
+                          <select className="troya-input" style={inp} value={f.producto_id || ''} onChange={(e) => elegirProducto(f.key, e.target.value)}>
+                            <option value="">Elegir producto…</option>
+                            {Object.entries(porCategoria).map(([cat, ps]) => (
+                              <optgroup key={cat} label={cat}>
+                                {ps.map((p) => <option key={p.id} value={p.id}>{p.codigo ? p.codigo + ' · ' : ''}{p.nombre}</option>)}
+                              </optgroup>
                             ))}
                           </select>
                         )}
-
-                        <input
-                          className="troya-input"
-                          style={{ flex: '0 0 90px' }}
-                          type="number"
-                          placeholder="Cant."
-                          value={it.cantidad}
-                          onChange={(e) => actualizarItem(it.clientId, { cantidad: Number(e.target.value) || 1 })}
-                        />
-
-                        {tipoForm === 'por_unidad' && (
-                          <input
-                            className="troya-input"
-                            style={{ flex: '0 0 160px' }}
-                            type="number"
-                            placeholder="Precio promo x unidad"
-                            value={it.precio_unitario_promo ?? ''}
-                            onChange={(e) => actualizarItem(it.clientId, { precio_unitario_promo: e.target.value ? Number(e.target.value) : null })}
-                          />
+                        {esExtra && <div style={{ fontSize: 11, color: 'var(--muted)' }}>Ítem fuera del catálogo (regalo u otro)</div>}
+                      </td>
+                      <td style={{ ...celda, width: 70 }}>
+                        <input className="troya-input" style={inp} inputMode="numeric" value={f.cantidad} onChange={(e) => setItem(f.key, { cantidad: e.target.value })} />
+                      </td>
+                      <td style={celda}>
+                        {esExtra
+                          ? <input className="troya-input" style={{ ...inp, minWidth: 90 }} inputMode="decimal" placeholder="0" value={f.precio_lista || ''}
+                              onChange={(e) => setItem(f.key, { precio_lista: num(e.target.value) })} />
+                          : sinElegir ? '—' : pesos(f.precio_lista)}
+                      </td>
+                      {tipo === 'por_unidad' && (
+                        <td style={{ ...celda, width: 90 }}>
+                          <input className="troya-input" style={inp} inputMode="decimal" value={f.descuento}
+                            disabled={!f.precio_lista} onChange={(e) => cambiarDescuento(f.key, e.target.value)} />
+                        </td>
+                      )}
+                      {tipo === 'por_unidad' && (
+                        <td style={{ ...celda, width: 130 }}>
+                          <input className="troya-input" style={inp} inputMode="decimal" value={f.precio_promo}
+                            placeholder={esExtra ? '0 = regalo' : ''} onChange={(e) => cambiarPrecio(f.key, e.target.value)} />
+                        </td>
+                      )}
+                      <td style={{ ...celda, whiteSpace: 'nowrap' }}>
+                        {tipo === 'por_unidad' ? (f.promoTotal === 0 && !sinElegir ? <b style={{ color: 'var(--orange)' }}>Regalo</b> : pesos(f.promoTotal)) : pesos(f.listaTotal)}
+                      </td>
+                      <td style={{ ...celda, whiteSpace: 'nowrap', color: 'var(--muted)' }}>
+                        {pesos(f.costoTotal)}
+                        {esExtra && (
+                          <input className="troya-input" style={{ ...inp, marginTop: 4, minWidth: 90 }} inputMode="decimal"
+                            placeholder="Costo c/u" value={(usarMP ? f.costo_mp : f.costo_completo) || ''}
+                            onChange={(e) => setItem(f.key, { costo_completo: num(e.target.value), costo_mp: num(e.target.value) })} />
                         )}
+                      </td>
+                      <td style={celda}>
+                        <button className="troya-btn-secundario" title="Quitar" onClick={() => setItems((p) => p.filter((i) => i.key !== f.key))}>✕</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-                        <button type="button" className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => quitarItem(it.clientId)} title="Quitar ítem">
-                          <IconTacho />
-                        </button>
-                      </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '12px 0' }}>
+            <button className="troya-btn-secundario" onClick={() => setItems((p) => [...p, itemVacio()])}>+ Agregar producto</button>
+            <button className="troya-btn-secundario" onClick={agregarExtra}>+ Agregar regalo / ítem fuera del catálogo</button>
+          </div>
 
-                      <p className="troya-subtitulo" style={{ marginTop: 8, marginBottom: 0 }}>
-                        Costo de este ítem: {money(costoUnitario(it))} x {it.cantidad || 0} = {money(costoUnitario(it) * (it.cantidad || 0))}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+          <label style={{ fontSize: 13, display: 'inline-flex', gap: 6, alignItems: 'center', marginBottom: 10 }}>
+            <input type="checkbox" checked={usarMP} onChange={(e) => setUsarMP(e.target.checked)} />
+            Calcular rentabilidad sobre materia prima (si no, sobre costo completo)
+          </label>
 
-                <button type="button" className="troya-btn troya-btn-secundario" style={{ marginTop: 10 }} onClick={agregarItem}>
-                  + Agregar ítem
-                </button>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, background: 'var(--tint-orange)', padding: 12, borderRadius: 10 }}>
+            <Dato t="Total a precio de lista" v={pesos(totalLista)} />
+            <Dato t="Descuento total" v={`${descTotal.toFixed(1)}%`} />
+            <Dato t="PRECIO TOTAL DE LA PROMO" v={pesos(totalPromo)} grande />
+            <Dato t="Costo total" v={pesos(totalCosto)} />
+            <Dato t="Ganancia" v={pesos(ganancia)} />
+            <Dato t="RENTABILIDAD TOTAL" v={`${rent.toFixed(1)}%`} grande color={colorRent(rent)} />
+          </div>
 
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 18, padding: '14px 16px', background: 'var(--tint-orange)', borderRadius: 10 }}>
-                  <div>
-                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Costo total</p>
-                    <p style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{money(costoTotalForm)}</p>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Precio total</p>
-                    <p style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{money(precioTotalForm)}</p>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, textTransform: 'uppercase' }}>Rentabilidad</p>
-                    <div style={{ marginTop: 2 }}>{badgeRentabilidad(rentabilidadForm)}</div>
-                  </div>
-                </div>
-
-                <div className="troya-card-acciones" style={{ marginTop: 16 }}>
-                  <button type="submit" className="troya-btn" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar promo'}</button>
-                  <button type="button" className="troya-btn troya-btn-secundario" onClick={() => setPanelAbierto(false)}>Cancelar</button>
-                </div>
-              </form>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+            <button className="troya-btn" disabled={guardando} onClick={guardar}>{guardando ? 'Guardando…' : 'Guardar promo'}</button>
+            <button className="troya-btn-secundario" onClick={() => setEditando(false)}>Cancelar</button>
+          </div>
         </div>
       )}
 
-      <div className="troya-buscador">
-        <IconBuscar />
-        <input type="text" placeholder="Buscar promo..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-      </div>
-
-      {cargando ? (
-        <p className="troya-subtitulo">Cargando...</p>
-      ) : promosFiltradas.length === 0 ? (
-        <div className="troya-vacio">
-          <h3>Todavía no hay promos armadas</h3>
-          <p>{puedeEditarModulo ? 'Usá "Nueva promo" arriba para crear la primera.' : 'Todavía no hay promos cargadas.'}</p>
-        </div>
+      {cargando ? <div className="troya-vacio">Cargando…</div> : promos.length === 0 && !editando ? (
+        <div className="troya-vacio">Todavía no hay promos. Creá la primera con “Nueva promo”.</div>
       ) : (
-        <div className="troya-lista">
-          {promosFiltradas.map((promo) => {
-            const items = itemsPorPromo[promo.id] ?? [];
-            const costoTotal = items.reduce((acc, it) => {
-              const c = it.producto_id
-                ? (baseRentabilidad === 'completo'
-                    ? productos.find((p) => p.id === it.producto_id)?.costo_completo
-                    : productos.find((p) => p.id === it.producto_id)?.costo_materia_prima) ?? 0
-                : it.costo_unitario_manual ?? 0;
-              return acc + c * Number(it.cantidad);
-            }, 0);
-            const precioTotal =
-              promo.tipo === 'combo_cerrado'
-                ? promo.precio_promocional ?? 0
-                : items.reduce((acc, it) => acc + (it.precio_unitario_promo ?? 0) * Number(it.cantidad), 0);
-            const rentabilidad = precioTotal > 0 ? ((precioTotal - costoTotal) / precioTotal) * 100 : 0;
-
+        <div style={{ display: 'grid', gap: 12 }}>
+          {promos.map((p) => {
+            const costo = p.items.reduce((a, i) => a + (usarMP ? i.costo_mp : i.costo_completo) * i.cantidad, 0);
+            const lista = p.items.reduce((a, i) => a + i.precio_lista * i.cantidad, 0);
+            const total = p.tipo === 'combo_cerrado' ? (p.precio_combo || 0) : p.items.reduce((a, i) => a + i.precio_promo * i.cantidad, 0);
+            const r = total > 0 ? ((total - costo) / total) * 100 : 0;
             return (
-              <div key={promo.id} className="troya-card troya-card-editando">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', flexWrap: 'wrap', gap: 10 }}>
-                  <div className="troya-card-info">
-                    <h3>{promo.nombre} {!promo.activa && '(desactivada)'}</h3>
-                    <p>
-                      {items.map((it) => `${it.nombre_item} x${it.cantidad}`).join(' + ')}
-                      {' · '}
-                      {promo.tipo === 'combo_cerrado' ? 'Precio de combo' : 'Precio por unidad'}: {money(precioTotal)}
-                    </p>
+              <div key={p.id} className="troya-card" style={{ padding: 14, opacity: p.activa ? 1 : 0.55 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                  <div>
+                    <b style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>{p.nombre}</b>
+                    {!p.activa && <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--muted)' }}>(desactivada)</span>}
+                    <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+                      {p.items.map((i) => `${i.cantidad}× ${i.nombre}${i.precio_promo === 0 ? ' (regalo)' : ''}`).join(' · ')}
+                    </div>
                   </div>
-                  {puedeEditarModulo && (
-                    <div className="troya-card-acciones">
-                      <button className="troya-btn troya-btn-secundario" onClick={() => toggleActiva(promo)}>
-                        {promo.activa ? 'Desactivar' : 'Reactivar'}
-                      </button>
-                      <button className="troya-icon-btn" onClick={() => abrirEdicion(promo)} title="Editar">
-                        <IconLapiz />
-                      </button>
-                      <button className="troya-icon-btn troya-icon-btn--eliminar" onClick={() => eliminarPromo(promo)} title="Eliminar">
-                        <IconTacho />
-                      </button>
+                  {editar && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="troya-btn-secundario" onClick={() => editarPromo(p)}>Editar</button>
+                      <button className="troya-btn-secundario" onClick={() => alternar(p)}>{p.activa ? 'Desactivar' : 'Activar'}</button>
+                      <button className="troya-btn-secundario" onClick={() => eliminar(p)}>Eliminar</button>
                     </div>
                   )}
                 </div>
-
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 4 }}>
-                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>Costo: {money(costoTotal)}</span>
-                  {badgeRentabilidad(rentabilidad)}
+                <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 10, fontSize: 14 }}>
+                  <span>Lista: <b>{pesos(lista)}</b></span>
+                  <span>Precio promo: <b>{pesos(total)}</b></span>
+                  <span>Costo: <b>{pesos(costo)}</b></span>
+                  <span>Rentabilidad: <b style={{ color: colorRent(r) }}>{r.toFixed(1)}%</b></span>
                 </div>
               </div>
             );
@@ -489,35 +398,11 @@ export default function PromosPage() {
   );
 }
 
-function IconMas() {
+function Dato({ t, v, grande, color }: { t: string; v: string; grande?: boolean; color?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-function IconBuscar() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="7" />
-      <path d="M21 21l-4.3-4.3" />
-    </svg>
-  );
-}
-function IconLapiz() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
-    </svg>
-  );
-}
-function IconTacho() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h18" />
-      <path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2" />
-      <path d="M19 6l-1 14a1 1 0 01-1 1H7a1 1 0 01-1-1L5 6" />
-    </svg>
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{t}</div>
+      <div style={{ fontSize: grande ? 22 : 16, fontWeight: 700, fontFamily: 'var(--font-display)', color: color || 'var(--ink)' }}>{v}</div>
+    </div>
   );
 }
