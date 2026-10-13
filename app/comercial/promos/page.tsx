@@ -309,9 +309,9 @@ export default function PromosPage() {
       {error && <div className="troya-vacio" style={{ color: 'var(--red)' }}>{error}</div>}
 
       {editando && (
-        <div className="troya-card" style={{ padding: 16, marginBottom: 20 }}>
-          {/* Datos de la promo */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: '#fff', border: '1px solid var(--line)', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <TituloSeccion n="1" t="Datos de la promo" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14, marginBottom: 22 }}>
             <label>
               <div style={etiqueta}>Nombre de la promo</div>
               <input className="troya-input" style={{ width: '100%' }} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Combo asador" />
@@ -355,9 +355,14 @@ export default function PromosPage() {
                 <option value="ambas">Ver ambas</option>
               </select>
             </label>
+            <label style={{ gridColumn: '1 / -1' }}>
+              <div style={etiqueta}>Observación (opcional)</div>
+              <input className="troya-input" style={{ width: '100%' }} value={observacion} onChange={(e) => setObservacion(e.target.value)}
+                placeholder="Ej: válida hasta fin de mes, entrega en 15 días, solo para Puntos Troya…" />
+            </label>
           </div>
 
-          {/* Ítems */}
+          <TituloSeccion n="2" t="Productos de la promo" />
           <div style={{ overflowX: 'auto' }}>
             <table className="troya-matriz-tabla" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 780 }}>
               <thead>
@@ -433,19 +438,14 @@ export default function PromosPage() {
             </table>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '12px 0' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '14px 0 24px' }}>
             <button className="troya-btn-secundario" onClick={() => setItems((p) => [...p, itemVacio(false)])}>+ Agregar producto</button>
             <button className="troya-btn-secundario" onClick={() => setItems((p) => [...p, itemVacio(true)])}>+ Agregar regalo / ítem fuera del catálogo</button>
           </div>
 
-          <label style={{ display: 'block', marginBottom: 14 }}>
-            <div style={etiqueta}>Observación (opcional)</div>
-            <input className="troya-input" style={{ width: '100%' }} value={observacion} onChange={(e) => setObservacion(e.target.value)}
-              placeholder="Ej: válida hasta fin de mes, entrega en 15 días, solo para Puntos Troya…" />
-          </label>
 
-          {/* Totales: tres tarjetas ordenadas */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12 }}>
+          <TituloSeccion n="3" t="Resultado" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 14, alignItems: 'stretch' }}>
             <Tarjeta titulo="Precio">
               <Fila t="Total a precio de lista" v={pesos(totalLista)} />
               <Fila t="Descuento total" v={`${descTotal.toFixed(1)}%`} />
@@ -469,7 +469,7 @@ export default function PromosPage() {
             })}
           </div>
 
-          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
             <button className="troya-btn" disabled={guardando} onClick={guardar}>{guardando ? 'Guardando…' : 'Guardar promo'}</button>
             <button className="troya-btn-secundario" onClick={() => setEditando(false)}>Cancelar</button>
           </div>
@@ -489,7 +489,7 @@ export default function PromosPage() {
             const realC = total > 0 ? ((total - costoC) / total) * 100 - pf : 0;
             const realM = total > 0 ? ((total - costoM) / total) * 100 - pf : 0;
             return (
-              <div key={p.id} className="troya-card" style={{ padding: 14, opacity: p.activa ? 1 : 0.55 }}>
+              <div key={p.id} style={{ display: 'block', background: '#fff', border: '1px solid var(--line)', borderRadius: 12, padding: 16, opacity: p.activa ? 1 : 0.55 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                   <div>
                     <b style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>{p.nombre}</b>
@@ -525,7 +525,7 @@ export default function PromosPage() {
 
 function Tarjeta({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: 'var(--tint-orange)', borderRadius: 10, padding: '10px 14px' }}>
+    <div style={{ background: 'var(--tint-orange)', borderRadius: 10, padding: '12px 16px', display: 'block' }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 6 }}>{titulo}</div>
       {children}
     </div>
@@ -541,6 +541,15 @@ function Fila({ t, v, destacado, color }: { t: string; v: string; destacado?: bo
     }}>
       <span style={{ fontSize: destacado ? 14 : 13, fontWeight: destacado ? 700 : 400 }}>{t}</span>
       <span style={{ fontSize: destacado ? 20 : 14, fontWeight: 700, fontFamily: 'var(--font-display)', color: color || 'var(--ink)', whiteSpace: 'nowrap' }}>{v}</span>
+    </div>
+  );
+}
+
+function TituloSeccion({ n, t }: { n: string; t: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px', paddingBottom: 6, borderBottom: '1px solid var(--line)' }}>
+      <span style={{ background: 'var(--red)', color: '#fff', borderRadius: 999, width: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{n}</span>
+      <b style={{ fontFamily: 'var(--font-display)', fontSize: 15 }}>{t}</b>
     </div>
   );
 }
