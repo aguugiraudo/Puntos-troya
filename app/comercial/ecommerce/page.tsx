@@ -26,6 +26,7 @@ type Config = {
 type Medio = { key: string; nombre: string; costo: string; activo: boolean };
 
 type Base = 'completo' | 'mp';
+type Vista = 'rent' | 'neto' | 'ganancia';
 
 const CONFIG_INICIAL: Config = { factor: '1.6', descuento: '20', paso: '1000', modo: 'cercano', comision: '0' };
 
@@ -53,15 +54,15 @@ function colorRent(r: number) {
   return '#DA231F';
 }
 
-function InputPesos({ value, onChange, onBlur, placeholder }: {
-  value: string; onChange: (v: string) => void; onBlur?: () => void; placeholder?: string;
+function InputPesos({ value, onChange, onBlur, placeholder, resaltado }: {
+  value: string; onChange: (v: string) => void; onBlur?: () => void; placeholder?: string; resaltado?: boolean;
 }) {
   const d = (value || '').replace(/\D/g, '');
   const texto = d ? '$ ' + Number(d).toLocaleString('es-AR') : '';
   return (
     <input
       className="troya-input"
-      style={{ width: '100%', minWidth: 120 }}
+      style={{ width: '100%', minWidth: 130, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', background: '#fff', border: resaltado ? '2px solid #F08723' : '1px solid #FABF1F' }}
       inputMode="numeric"
       placeholder={placeholder || '$ 0'}
       value={texto}
@@ -86,6 +87,7 @@ export default function EcommercePage() {
   const [verConfig, setVerConfig] = useState(false);
   const [guardandoCfg, setGuardandoCfg] = useState(false);
   const [base, setBase] = useState<Base>('completo');
+  const [vista, setVista] = useState<Vista>('rent');
   const [buscar, setBuscar] = useState('');
   const [categoria, setCategoria] = useState('');
 
@@ -231,18 +233,28 @@ export default function EcommercePage() {
   if (!puedeVer('costos_precios')) return <div className="troya-vacio">No tenés acceso a este módulo.</div>;
 
   const etiqueta: React.CSSProperties = { fontSize: 12, color: 'var(--muted)', marginBottom: 2 };
-  const th: React.CSSProperties = { padding: '8px 8px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.3, color: 'var(--muted)', whiteSpace: 'nowrap', verticalAlign: 'bottom' };
-  const td: React.CSSProperties = { padding: '6px 8px', whiteSpace: 'nowrap', verticalAlign: 'middle', fontSize: 14 };
+  const NUM: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+  const thBase: React.CSSProperties = { padding: '8px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', whiteSpace: 'nowrap', verticalAlign: 'bottom', background: '#fff' };
+  const tdBase: React.CSSProperties = { padding: '7px 12px', whiteSpace: 'nowrap', verticalAlign: 'middle', fontSize: 14 };
+  const sepIzq: React.CSSProperties = { borderLeft: '1px solid var(--line)' };
+  const COL_PRODUCTO = 300;
+  const nCols = 9 + activos.length;
+  const colRent = (x: { rent: number | null; neto: number; ganancia: number }) => {
+    if (x.rent === null) return <span style={{ color: 'var(--muted)' }}>—</span>;
+    if (vista === 'neto') return <b>{pesos(x.neto)}</b>;
+    if (vista === 'ganancia') return <b style={{ color: x.ganancia >= 0 ? 'var(--ink)' : '#DA231F' }}>{pesos(x.ganancia)}</b>;
+    return <b style={{ color: colorRent(x.rent) }}>{x.rent.toFixed(1)}%</b>;
+  };
 
   return (
     <div>
       <div className="troya-header">
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', margin: 0 }}>Venta e-commerce</h1>
-          <p className="troya-subtitulo">Precio web, descuento, precio final redondeado y rentabilidad por medio de pago.</p>
+          <p className="troya-subtitulo">Del precio de lista al precio final de la tienda, y cuánto te queda por medio de pago.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="troya-btn-secundario" onClick={exportarExcel}>Exportar Excel</button>
+          <button className="troya-btn-secundario" onClick={exportarExcel}>Exportar a Excel</button>
           <button className="troya-btn" onClick={() => setVerConfig((v) => !v)}>{verConfig ? 'Cerrar configuración' : 'Configuración'}</button>
         </div>
       </div>
@@ -316,16 +328,17 @@ export default function EcommercePage() {
         </div>
       )}
 
-      {/* Resumen de la regla vigente */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 14, margin: '0 0 12px' }}>
+      {/* Reglas vigentes */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 14px' }}>
+        <span style={{ fontSize: 12, color: 'var(--muted)', marginRight: 4 }}>Reglas vigentes:</span>
         <Chip t={`Factor ×${cfg.factor}`} />
         <Chip t={`Descuento ${cfg.descuento}%`} />
         <Chip t={paso ? `Redondeo a $${paso.toLocaleString('es-AR')} − $1` : 'Sin redondeo'} />
-        <Chip t={`Comisión tienda ${cfg.comision}%`} />
+        <Chip t={`Comisión de la tienda ${cfg.comision}%`} />
       </div>
 
-      {/* Barra de herramientas */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 14 }}>
+      {/* Filtros y opciones de vista */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, marginBottom: 10 }}>
         <label>
           <div style={etiqueta}>Buscar</div>
           <input className="troya-input" style={{ width: '100%' }} value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Nombre o código" />
@@ -338,83 +351,113 @@ export default function EcommercePage() {
           </select>
         </label>
         <label>
-          <div style={etiqueta}>Rentabilidad calculada</div>
+          <div style={etiqueta}>Costo de referencia</div>
           <select className="troya-input" style={{ width: '100%' }} value={base} onChange={(e) => setBase(e.target.value as Base)}>
-            <option value="completo">Sobre costo completo</option>
-            <option value="mp">Sobre materia prima</option>
+            <option value="completo">Costo completo</option>
+            <option value="mp">Materia prima</option>
           </select>
         </label>
+        <label>
+          <div style={etiqueta}>Medios de pago: mostrar</div>
+          <select className="troya-input" style={{ width: '100%' }} value={vista} onChange={(e) => setVista(e.target.value as Vista)}>
+            <option value="rent">Rentabilidad (%)</option>
+            <option value="neto">Neto que cobrás ($)</option>
+            <option value="ganancia">Ganancia ($)</option>
+          </select>
+        </label>
+      </div>
+
+      {/* Leyenda + acciones masivas */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 10px' }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--muted)' }}>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#EFE8E1', marginRight: 6 }} />Datos del sistema (solo lectura)</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, border: '1px solid var(--ink)', marginRight: 6 }} />Calculado</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#FFF3C4', border: '1px solid #FABF1F', marginRight: 6 }} />Lo cargás vos</span>
+        </div>
         {editar && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <button className="troya-btn-secundario" onClick={fijarTodosRedondeados}>Fijar todos al redondeado</button>
-            <button className="troya-btn-secundario" onClick={borrarManuales}>Borrar manuales</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="troya-btn-secundario" onClick={fijarTodosRedondeados}>Usar el redondeado en todos</button>
+            <button className="troya-btn-secundario" onClick={borrarManuales}>Limpiar precios manuales</button>
           </div>
         )}
       </div>
 
       {cargando ? <div className="troya-vacio">Cargando…</div> : (
-        <div style={{ overflowX: 'auto', background: '#fff', border: '1px solid var(--line)', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
+        <div style={{ overflow: 'auto', maxHeight: '70vh', background: '#fff', border: '1px solid var(--line)', borderRadius: 12 }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                <th style={th}>Código</th>
-                <th style={th}>Producto</th>
-                <th style={th}>{base === 'mp' ? 'Costo MP' : 'Costo completo'}</th>
-                <th style={th}>Lista sistema</th>
-                <th style={th}>Precio web ×{cfg.factor}</th>
-                <th style={th}>Con {cfg.descuento}% desc.</th>
-                <th style={th}>Redondeado</th>
-                <th style={{ ...th, color: 'var(--red)' }}>Precio final<div style={{ textTransform: 'none', fontWeight: 400 }}>(manual o redondeado)</div></th>
-                <th style={th}>Desc. real</th>
-                {activos.map((m) => (
-                  <th key={m.key} style={th}>
-                    Rent. {m.nombre}
+              {/* Fila de grupos */}
+              <tr>
+                <th colSpan={2} style={{ ...thBase, position: 'sticky', top: 0, left: 0, zIndex: 4, borderBottom: '1px solid var(--line)', color: 'var(--ink)' }}>Producto</th>
+                <th colSpan={2} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', background: '#F5F0EA', color: 'var(--ink)', ...sepIzq }}>Datos del sistema</th>
+                <th colSpan={3} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', color: 'var(--ink)', ...sepIzq }}>Precio web (calculado)</th>
+                <th colSpan={2} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', background: '#FFF3C4', color: 'var(--ink)', ...sepIzq }}>Tu precio</th>
+                {activos.length > 0 && (
+                  <th colSpan={activos.length} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', color: 'var(--ink)', ...sepIzq }}>
+                    {vista === 'rent' ? 'Rentabilidad por medio de pago' : vista === 'neto' ? 'Neto que cobrás por medio de pago' : 'Ganancia por medio de pago'}
+                  </th>
+                )}
+              </tr>
+              {/* Fila de columnas */}
+              <tr>
+                <th style={{ ...thBase, position: 'sticky', top: 33, left: 0, zIndex: 4, width: COL_PRODUCTO, minWidth: COL_PRODUCTO, textAlign: 'left', borderBottom: '1px solid var(--line)' }} colSpan={2}>Nombre y código</th>
+                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#F5F0EA', ...sepIzq }}>{base === 'mp' ? 'Materia prima' : 'Costo completo'}</th>
+                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#F5F0EA' }}>Precio de lista</th>
+                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', ...sepIzq }}>Precio web<div style={{ textTransform: 'none', fontWeight: 400 }}>lista × {cfg.factor}</div></th>
+                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)' }}>Con descuento<div style={{ textTransform: 'none', fontWeight: 400 }}>−{cfg.descuento}%</div></th>
+                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)' }}>Redondeado<div style={{ textTransform: 'none', fontWeight: 400 }}>sugerido</div></th>
+                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#FFF3C4', color: 'var(--ink)', ...sepIzq }}>Precio final<div style={{ textTransform: 'none', fontWeight: 400 }}>podés editarlo</div></th>
+                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#FFF3C4', color: 'var(--ink)' }}>Descuento real<div style={{ textTransform: 'none', fontWeight: 400 }}>vs. precio web</div></th>
+                {activos.map((m, i) => (
+                  <th key={m.key} style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', ...(i === 0 ? sepIzq : {}) }}>
+                    {m.nombre}
                     <div style={{ textTransform: 'none', fontWeight: 400 }}>costo {(comision + num(m.costo)).toLocaleString('es-AR')}%</div>
                   </th>
                 ))}
               </tr>
-              {/* promedios */}
-              <tr style={{ background: 'var(--tint-orange)', borderBottom: '1px solid var(--line)' }}>
-                <td style={{ ...td, fontWeight: 700 }} colSpan={9}>Rentabilidad promedio de los productos</td>
+              {/* Promedio */}
+              <tr>
+                <td colSpan={9} style={{ ...tdBase, position: 'sticky', top: 77, zIndex: 2, background: 'var(--tint-orange)', fontWeight: 700, fontSize: 13, borderBottom: '1px solid var(--line)' }}>
+                  Rentabilidad promedio de todos los productos
+                </td>
                 {promedios.map((v, i) => (
-                  <td key={i} style={{ ...td, fontWeight: 700, color: v === null ? 'var(--muted)' : colorRent(v) }}>{v === null ? '—' : v.toFixed(1) + '%'}</td>
+                  <td key={i} style={{ ...tdBase, ...NUM, position: 'sticky', top: 77, zIndex: 2, background: 'var(--tint-orange)', fontWeight: 700, borderBottom: '1px solid var(--line)', color: v === null ? 'var(--muted)' : colorRent(v), ...(i === 0 ? sepIzq : {}) }}>
+                    {v === null ? '—' : v.toFixed(1) + '%'}
+                  </td>
                 ))}
               </tr>
             </thead>
             <tbody>
               {visibles.length === 0 && (
-                <tr><td colSpan={9 + activos.length} className="troya-vacio">No hay productos para mostrar.</td></tr>
+                <tr><td colSpan={nCols + 1} className="troya-vacio">No hay productos para mostrar.</td></tr>
               )}
               {visibles.map((r) => {
                 const esManual = r.manual > 0;
+                const borde = '1px solid #F0EAE3';
                 return (
-                  <tr key={r.p.id} style={{ borderTop: '1px solid var(--line)' }}>
-                    <td style={{ ...td, color: 'var(--muted)' }}>{r.p.codigo || '—'}</td>
-                    <td style={{ ...td, whiteSpace: 'normal', minWidth: 220 }}>{r.p.nombre}</td>
-                    <td style={{ ...td, color: 'var(--muted)' }}>{r.costo ? pesos(r.costo) : '—'}</td>
-                    <td style={td}>{r.lista ? pesos(r.lista) : '—'}</td>
-                    <td style={td}>{r.web ? pesos(r.web) : '—'}</td>
-                    <td style={td}>{r.conDesc ? pesos(r.conDesc) : '—'}</td>
-                    <td style={td}>{r.objetivo ? pesos(r.objetivo) : '—'}</td>
-                    <td style={{ ...td, minWidth: 150 }}>
+                  <tr key={r.p.id}>
+                    <td colSpan={2} style={{ ...tdBase, position: 'sticky', left: 0, zIndex: 1, background: '#fff', borderBottom: borde, width: COL_PRODUCTO, minWidth: COL_PRODUCTO, maxWidth: COL_PRODUCTO }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={r.p.nombre}>{r.p.nombre}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>{r.p.codigo || 'Sin código'}</div>
+                    </td>
+                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, background: '#FAF7F3', color: 'var(--muted)', ...sepIzq }}>{r.costo ? pesos(r.costo) : '—'}</td>
+                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, background: '#FAF7F3', color: 'var(--muted)' }}>{r.lista ? pesos(r.lista) : '—'}</td>
+                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, ...sepIzq }}>{r.web ? pesos(r.web) : '—'}</td>
+                    <td style={{ ...tdBase, ...NUM, borderBottom: borde }}>{r.conDesc ? pesos(r.conDesc) : '—'}</td>
+                    <td style={{ ...tdBase, ...NUM, borderBottom: borde }}>{r.objetivo ? pesos(r.objetivo) : '—'}</td>
+                    <td style={{ ...tdBase, borderBottom: borde, background: '#FFFBE6', minWidth: 150, ...sepIzq }}>
                       <InputPesos
                         value={manuales[r.p.id] || ''}
                         placeholder={r.objetivo ? pesos(r.objetivo) : '$ 0'}
                         onChange={(v) => setManuales((prev) => ({ ...prev, [r.p.id]: v }))}
                         onBlur={() => guardarManual(r.p.id)}
+                        resaltado={esManual}
                       />
-                      <div style={{ fontSize: 11, color: esManual ? 'var(--orange)' : 'var(--muted)' }}>{esManual ? 'Precio manual' : 'Automático'}</div>
+                      <div style={{ fontSize: 11, textAlign: 'right', color: esManual ? 'var(--orange)' : 'var(--muted)', marginTop: 2 }}>{esManual ? 'Precio manual' : 'Usa el redondeado'}</div>
                     </td>
-                    <td style={td}>{r.usado ? r.descReal.toFixed(1) + '%' : '—'}</td>
+                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, background: '#FFFBE6' }}>{r.usado ? r.descReal.toFixed(1) + '%' : '—'}</td>
                     {r.porMedio.map((x, i) => (
-                      <td key={i} style={td}>
-                        {x.rent === null ? '—' : (
-                          <>
-                            <b style={{ color: colorRent(x.rent) }}>{x.rent.toFixed(1)}%</b>
-                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Neto {pesos(x.neto)}</div>
-                          </>
-                        )}
-                      </td>
+                      <td key={i} style={{ ...tdBase, ...NUM, borderBottom: borde, ...(i === 0 ? sepIzq : {}) }}>{colRent(x)}</td>
                     ))}
                   </tr>
                 );
