@@ -45,6 +45,7 @@ const SECCIONES: Seccion[] = [
       { href: '/comercial/costos-precios', label: 'Costos y precios', modulo: 'costos_precios' },
       { href: '/mas/minimos-distribuidor', label: 'Mínimos distribuidor', modulo: 'minimos_distribuidor' },
       { href: '/comercial/promos', label: 'Promos', modulo: 'promos' },
+      { href: '/comercial/ecommerce', label: 'E-commerce', modulo: 'costos_precios' },
       { href: '/comercial/cotizador', label: 'Cotizador', modulo: 'cotizador' },
       { href: '/comercial/stock', label: 'Stock', modulo: 'stock' },
     ],
