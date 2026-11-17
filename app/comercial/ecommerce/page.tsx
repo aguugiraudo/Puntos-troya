@@ -79,6 +79,27 @@ function InputPesos({ value, onChange, onBlur, placeholder, resaltado }: {
   );
 }
 
+const COLUMNAS: Array<{ k: string; label: string; grupo: string }> = [
+  { k: 'costo', label: 'Costo', grupo: 'Datos del sistema' },
+  { k: 'lista', label: 'Lista sin IVA', grupo: 'Datos del sistema' },
+  { k: 'listaIva', label: 'Lista con IVA', grupo: 'Datos del sistema' },
+  { k: 'web', label: 'Precio web', grupo: 'Precio web' },
+  { k: 'conDesc', label: 'Con descuento', grupo: 'Precio web' },
+  { k: 'redondeado', label: 'Redondeado', grupo: 'Precio web' },
+  { k: 'descReal', label: 'Descuento real', grupo: 'Tu precio' },
+  { k: 'piso', label: 'Piso web', grupo: 'Control Punto Troya' },
+  { k: 'estado', label: 'Tu precio vs. piso', grupo: 'Control Punto Troya' },
+];
+const COLS_INICIAL: Record<string, boolean> = {
+  costo: true, lista: false, listaIva: true, web: true, conDesc: false, redondeado: true, descReal: true, piso: true, estado: true,
+};
+const PRESETS: Record<string, string[]> = {
+  'Todo': COLUMNAS.map((c) => c.k),
+  'Precios': ['listaIva', 'web', 'conDesc', 'redondeado', 'descReal'],
+  'Rentabilidad': ['costo', 'redondeado'],
+  'Control Punto Troya': ['listaIva', 'redondeado', 'piso', 'estado'],
+};
+
 export default function EcommercePage() {
   const { puedeVer, puedeEditar } = useAuth();
   const editar = puedeEditar('costos_precios');
@@ -97,6 +118,8 @@ export default function EcommercePage() {
   const [buscar, setBuscar] = useState('');
   const [categoria, setCategoria] = useState('');
   const [descPT, setDescPT] = useState(33);
+  const [cols, setCols] = useState<Record<string, boolean>>(COLS_INICIAL);
+  const [verCols, setVerCols] = useState(false);
 
   async function cargar() {
     setCargando(true);
@@ -135,6 +158,25 @@ export default function EcommercePage() {
     setCargando(false);
   }
   useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    try {
+      const g = localStorage.getItem('ecom_cols');
+      if (g) setCols({ ...COLS_INICIAL, ...JSON.parse(g) });
+    } catch { /* sin almacenamiento: se usan los valores por defecto */ }
+  }, []);
+  function cambiarCols(n: Record<string, boolean>) {
+    setCols(n);
+    try { localStorage.setItem('ecom_cols', JSON.stringify(n)); } catch { /* ignorar */ }
+  }
+  const ver = (k: string) => cols[k] !== false;
+  const verMedio = (nombre: string) => cols['m:' + nombre] !== false;
+  function aplicarPreset(nombre: string) {
+    const lista = PRESETS[nombre];
+    const n: Record<string, boolean> = {};
+    COLUMNAS.forEach((c) => { n[c.k] = lista.includes(c.k); });
+    activos.forEach((m) => { n['m:' + m.nombre] = true; });
+    cambiarCols(n);
+  }
 
   // ---------- Configuración ----------
   async function guardarConfig() {
@@ -467,104 +509,156 @@ export default function EcommercePage() {
         )}
       </div>
 
-      {cargando ? <div className="troya-vacio">Cargando…</div> : (
-        <div style={{ overflow: 'auto', maxHeight: '70vh', background: '#fff', border: '1px solid var(--line)', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
-            <thead>
-              {/* Fila de grupos */}
-              <tr>
-                <th colSpan={2} style={{ ...thBase, position: 'sticky', top: 0, left: 0, zIndex: 4, borderBottom: '1px solid var(--line)', color: 'var(--ink)' }}>Producto</th>
-                <th colSpan={3} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', background: '#F5F0EA', color: 'var(--ink)', ...sepIzq }}>Datos del sistema</th>
-                <th colSpan={3} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', color: 'var(--ink)', ...sepIzq }}>Precio web con IVA (calculado)</th>
-                <th colSpan={2} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', background: '#FFF3C4', color: 'var(--ink)', ...sepIzq }}>Tu precio</th>
-                <th colSpan={2} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', color: 'var(--ink)', ...sepIzq }}>Control vs. Punto Troya</th>
-                {activos.length > 0 && (
-                  <th colSpan={activos.length} style={{ ...thBase, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', color: 'var(--ink)', ...sepIzq }}>
-                    {vista === 'rent' ? 'Rentabilidad por medio de pago' : vista === 'neto' ? 'Neto sin IVA por medio de pago' : 'Ganancia por medio de pago'}
-                  </th>
-                )}
-              </tr>
-              {/* Fila de columnas */}
-              <tr>
-                <th style={{ ...thBase, position: 'sticky', top: 33, left: 0, zIndex: 4, width: COL_PRODUCTO, minWidth: COL_PRODUCTO, textAlign: 'left', borderBottom: '1px solid var(--line)' }} colSpan={2}>Nombre y código</th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#F5F0EA', ...sepIzq }}>{base === 'mp' ? 'Materia prima' : 'Costo completo'}</th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#F5F0EA' }}>Lista<div style={{ textTransform: 'none', fontWeight: 400 }}>sin IVA</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#F5F0EA' }}>Lista<div style={{ textTransform: 'none', fontWeight: 400 }}>con IVA</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', ...sepIzq }}>Precio web<div style={{ textTransform: 'none', fontWeight: 400 }}>lista × {cfg.factor}</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)' }}>Con descuento<div style={{ textTransform: 'none', fontWeight: 400 }}>−{cfg.descuento}%</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)' }}>Redondeado<div style={{ textTransform: 'none', fontWeight: 400 }}>sugerido</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#FFF3C4', color: 'var(--ink)', ...sepIzq }}>Precio final<div style={{ textTransform: 'none', fontWeight: 400 }}>podés editarlo</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', background: '#FFF3C4', color: 'var(--ink)' }}>Descuento real<div style={{ textTransform: 'none', fontWeight: 400 }}>vs. precio web</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', ...sepIzq }}>Piso web<div style={{ textTransform: 'none', fontWeight: 400 }}>lista + IVA + cuotas</div></th>
-                <th style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)' }}>Tu precio<div style={{ textTransform: 'none', fontWeight: 400 }}>vs. el piso</div></th>
-                {activos.map((m, i) => (
-                  <th key={m.key} style={{ ...thBase, ...NUM, position: 'sticky', top: 33, zIndex: 2, borderBottom: '1px solid var(--line)', ...(i === 0 ? sepIzq : {}) }}>
+      {/* Selector de columnas */}
+      <div style={{ margin: '0 0 10px' }}>
+        <button className="troya-btn-secundario" onClick={() => setVerCols((v) => !v)}>{verCols ? 'Cerrar columnas' : 'Elegir columnas'}</button>
+        {verCols && (
+          <div style={{ marginTop: 8, background: '#fff', border: '1px solid var(--line)', borderRadius: 12, padding: 14 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Vistas rápidas:</span>
+              {Object.keys(PRESETS).map((p) => (
+                <button key={p} className="troya-btn-secundario" onClick={() => aplicarPreset(p)}>{p}</button>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
+              {Array.from(new Set(COLUMNAS.map((c) => c.grupo))).map((g) => (
+                <div key={g}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 6 }}>{g}</div>
+                  {COLUMNAS.filter((c) => c.grupo === g).map((c) => (
+                    <label key={c.k} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '2px 0' }}>
+                      <input type="checkbox" checked={ver(c.k)} onChange={(e) => cambiarCols({ ...cols, [c.k]: e.target.checked })} />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              ))}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 6 }}>Medios de pago</div>
+                {activos.map((m) => (
+                  <label key={m.key} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '2px 0' }}>
+                    <input type="checkbox" checked={verMedio(m.nombre)} onChange={(e) => cambiarCols({ ...cols, ['m:' + m.nombre]: e.target.checked })} />
                     {m.nombre}
-                    <div style={{ textTransform: 'none', fontWeight: 400 }}>costo {(comision + num(m.costo)).toLocaleString('es-AR')}%</div>
-                  </th>
+                  </label>
                 ))}
-              </tr>
-              {/* Promedio */}
-              <tr>
-                <td colSpan={12} style={{ ...tdBase, position: 'sticky', top: 77, zIndex: 2, background: 'var(--tint-orange)', fontWeight: 700, fontSize: 13, borderBottom: '1px solid var(--line)' }}>
-                  Rentabilidad promedio de todos los productos
-                </td>
-                {promedios.map((v, i) => (
-                  <td key={i} style={{ ...tdBase, ...NUM, position: 'sticky', top: 77, zIndex: 2, background: 'var(--tint-orange)', fontWeight: 700, borderBottom: '1px solid var(--line)', color: v === null ? 'var(--muted)' : colorRent(v), ...(i === 0 ? sepIzq : {}) }}>
-                    {v === null ? '—' : v.toFixed(1) + '%'}
-                  </td>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visibles.length === 0 && (
-                <tr><td colSpan={nCols + 1} className="troya-vacio">No hay productos para mostrar.</td></tr>
-              )}
-              {visibles.map((r) => {
-                const esManual = r.manual > 0;
-                const borde = '1px solid #F0EAE3';
-                return (
-                  <tr key={r.p.id}>
-                    <td colSpan={2} style={{ ...tdBase, position: 'sticky', left: 0, zIndex: 1, background: '#fff', borderBottom: borde, width: COL_PRODUCTO, minWidth: COL_PRODUCTO, maxWidth: COL_PRODUCTO }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={r.p.nombre}>{r.p.nombre}</div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>{r.p.codigo || 'Sin código'}</div>
-                    </td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, background: '#FAF7F3', color: 'var(--muted)', ...sepIzq }}>{r.costo ? pesos(r.costo) : '—'}</td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, background: '#FAF7F3', color: 'var(--muted)' }}>{r.lista ? pesos(r.lista) : '—'}</td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, background: '#FAF7F3', color: 'var(--muted)' }}>{r.lista ? pesos(r.listaIva) : '—'}</td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, ...sepIzq }}>{r.web ? pesos(r.web) : '—'}</td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde }}>{r.conDesc ? pesos(r.conDesc) : '—'}</td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde }}>{r.objetivo ? pesos(r.objetivo) : '—'}</td>
-                    <td style={{ ...tdBase, borderBottom: borde, background: '#FFFBE6', minWidth: 150, ...sepIzq }}>
-                      <InputPesos
-                        value={manuales[r.p.id] || ''}
-                        placeholder={r.objetivo ? pesos(r.objetivo) : '$ 0'}
-                        onChange={(v) => setManuales((prev) => ({ ...prev, [r.p.id]: v }))}
-                        onBlur={() => guardarManual(r.p.id)}
-                        resaltado={esManual}
-                      />
-                      <div style={{ fontSize: 11, textAlign: 'right', color: esManual ? 'var(--orange)' : 'var(--muted)', marginTop: 2 }}>{esManual ? 'Precio manual' : 'Usa el redondeado'}</div>
-                    </td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, background: '#FFFBE6' }}>{r.usado ? r.descReal.toFixed(1) + '%' : '—'}</td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde, color: 'var(--muted)', ...sepIzq }} title={`El Punto Troya compra a ${pesos(r.compraPT)} + IVA y vende a la lista (${pesos(r.lista)} + IVA)`}>{r.piso ? pesos(r.piso) : '—'}</td>
-                    <td style={{ ...tdBase, ...NUM, borderBottom: borde }}>
-                      {r.vsPiso === null ? <span style={{ color: 'var(--muted)' }}>—</span> : r.vsPiso >= 0
-                        ? <b style={{ color: '#2e7d32' }}>✔ +{r.vsPiso.toFixed(1)}%</b>
-                        : <b style={{ color: '#DA231F' }}>⚠ {r.vsPiso.toFixed(1)}%</b>}
-                      {r.vsPiso !== null && r.vsPiso < 0 && r.margenPT !== null && (
-                        <div style={{ fontSize: 11, color: '#DA231F' }}>Punto Troya: margen {r.margenPT.toFixed(1)}%</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>Siempre se muestran el producto y el precio final. Tu elección queda guardada en este navegador.</div>
+          </div>
+        )}
+      </div>
+
+      {cargando ? <div className="troya-vacio">Cargando…</div> : (() => {
+        const mediosVis = activos.map((m, i) => ({ m, i })).filter((x) => verMedio(x.m.nombre));
+        const nSis = ['costo', 'lista', 'listaIva'].filter(ver).length;
+        const nWeb = ['web', 'conDesc', 'redondeado'].filter(ver).length;
+        const nTu = 1 + (ver('descReal') ? 1 : 0);
+        const nCtl = ['piso', 'estado'].filter(ver).length;
+        const total = 1 + nSis + nWeb + nTu + nCtl + mediosVis.length;
+        const P: React.CSSProperties = { padding: '7px 8px', fontSize: 13 };
+        const TH2: React.CSSProperties = { ...thBase, padding: '6px 8px', fontSize: 10.5, ...NUM, position: 'sticky', top: 30, zIndex: 2, borderBottom: '1px solid var(--line)', whiteSpace: 'normal', lineHeight: 1.2 };
+        const TH1: React.CSSProperties = { ...thBase, padding: '6px 8px', fontSize: 10.5, position: 'sticky', top: 0, zIndex: 3, textAlign: 'center', borderBottom: '1px solid var(--line)', color: 'var(--ink)', ...sepIzq };
+        const sub = (t: string) => <div style={{ textTransform: 'none', fontWeight: 400 }}>{t}</div>;
+        return (
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '72vh', background: '#fff', border: '1px solid var(--line)', borderRadius: 12 }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thBase, padding: '6px 8px', position: 'sticky', top: 0, left: 0, zIndex: 5, borderBottom: '1px solid var(--line)', color: 'var(--ink)', textAlign: 'left' }}>Producto</th>
+                  {nSis > 0 && <th colSpan={nSis} style={{ ...TH1, background: '#F5F0EA' }}>Datos del sistema</th>}
+                  {nWeb > 0 && <th colSpan={nWeb} style={TH1}>Precio web con IVA</th>}
+                  <th colSpan={nTu} style={{ ...TH1, background: '#FFF3C4' }}>Tu precio</th>
+                  {nCtl > 0 && <th colSpan={nCtl} style={TH1}>Control vs. Punto Troya</th>}
+                  {mediosVis.length > 0 && (
+                    <th colSpan={mediosVis.length} style={TH1}>
+                      {vista === 'rent' ? 'Rentabilidad por medio de pago' : vista === 'neto' ? 'Neto sin IVA por medio de pago' : 'Ganancia por medio de pago'}
+                    </th>
+                  )}
+                </tr>
+                <tr>
+                  <th style={{ ...TH2, position: 'sticky', left: 0, zIndex: 5, textAlign: 'left', background: '#fff' }}>Nombre y código</th>
+                  {ver('costo') && <th style={{ ...TH2, background: '#F5F0EA', ...sepIzq }}>{base === 'mp' ? 'Materia prima' : 'Costo completo'}</th>}
+                  {ver('lista') && <th style={{ ...TH2, background: '#F5F0EA', ...(ver('costo') ? {} : sepIzq) }}>Lista{sub('sin IVA')}</th>}
+                  {ver('listaIva') && <th style={{ ...TH2, background: '#F5F0EA', ...(ver('costo') || ver('lista') ? {} : sepIzq) }}>Lista{sub('con IVA')}</th>}
+                  {ver('web') && <th style={{ ...TH2, ...sepIzq }}>Precio web{sub(`lista × ${cfg.factor}`)}</th>}
+                  {ver('conDesc') && <th style={{ ...TH2, ...(ver('web') ? {} : sepIzq) }}>Con descuento{sub(`−${cfg.descuento}%`)}</th>}
+                  {ver('redondeado') && <th style={{ ...TH2, ...(ver('web') || ver('conDesc') ? {} : sepIzq) }}>Redondeado{sub('sugerido')}</th>}
+                  <th style={{ ...TH2, background: '#FFF3C4', color: 'var(--ink)', ...sepIzq }}>Precio final{sub('editable')}</th>
+                  {ver('descReal') && <th style={{ ...TH2, background: '#FFF3C4', color: 'var(--ink)' }}>Desc. real{sub('vs. web')}</th>}
+                  {ver('piso') && <th style={{ ...TH2, ...sepIzq }}>Piso web{sub('lista + IVA + cuotas')}</th>}
+                  {ver('estado') && <th style={{ ...TH2, ...(ver('piso') ? {} : sepIzq) }}>Tu precio{sub('vs. piso')}</th>}
+                  {mediosVis.map(({ m }, j) => (
+                    <th key={m.key} style={{ ...TH2, ...(j === 0 ? sepIzq : {}) }}>
+                      {m.nombre.replace(' sin interés', '')}
+                      {sub(`costo ${costoVentaPct(m).toLocaleString('es-AR', { maximumFractionDigits: 2 })}%`)}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  <td style={{ ...P, position: 'sticky', top: 62, left: 0, zIndex: 5, background: 'var(--tint-orange)', fontWeight: 700, fontSize: 12, borderBottom: '1px solid var(--line)' }}>Rentabilidad promedio</td>
+                  <td colSpan={total - 1 - mediosVis.length} style={{ ...P, position: 'sticky', top: 62, zIndex: 2, background: 'var(--tint-orange)', borderBottom: '1px solid var(--line)' }} />
+                  {mediosVis.map(({ i }, j) => {
+                    const v = promedios[i];
+                    return (
+                      <td key={i} style={{ ...P, ...NUM, position: 'sticky', top: 62, zIndex: 2, background: 'var(--tint-orange)', fontWeight: 700, borderBottom: '1px solid var(--line)', color: v === null ? 'var(--muted)' : colorRent(v), ...(j === 0 ? sepIzq : {}) }}>
+                        {v === null ? '—' : v.toFixed(1) + '%'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {visibles.length === 0 && (
+                  <tr><td colSpan={total} className="troya-vacio">No hay productos para mostrar.</td></tr>
+                )}
+                {visibles.map((r) => {
+                  const esManual = r.manual > 0;
+                  const borde = '1px solid #F0EAE3';
+                  const c: React.CSSProperties = { ...P, ...NUM, borderBottom: borde };
+                  return (
+                    <tr key={r.p.id}>
+                      <td style={{ ...P, position: 'sticky', left: 0, zIndex: 1, background: '#fff', borderBottom: borde, minWidth: 200, maxWidth: 260 }}>
+                        <div style={{ fontWeight: 600, lineHeight: 1.25 }} title={r.p.nombre}>{r.p.nombre}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{r.p.codigo || 'Sin código'}</div>
+                      </td>
+                      {ver('costo') && <td style={{ ...c, background: '#FAF7F3', color: 'var(--muted)', ...sepIzq }}>{r.costo ? pesos(r.costo) : '—'}</td>}
+                      {ver('lista') && <td style={{ ...c, background: '#FAF7F3', color: 'var(--muted)', ...(ver('costo') ? {} : sepIzq) }}>{r.lista ? pesos(r.lista) : '—'}</td>}
+                      {ver('listaIva') && <td style={{ ...c, background: '#FAF7F3', color: 'var(--muted)', ...(ver('costo') || ver('lista') ? {} : sepIzq) }}>{r.lista ? pesos(r.listaIva) : '—'}</td>}
+                      {ver('web') && <td style={{ ...c, ...sepIzq }}>{r.web ? pesos(r.web) : '—'}</td>}
+                      {ver('conDesc') && <td style={{ ...c, ...(ver('web') ? {} : sepIzq) }}>{r.conDesc ? pesos(r.conDesc) : '—'}</td>}
+                      {ver('redondeado') && <td style={{ ...c, ...(ver('web') || ver('conDesc') ? {} : sepIzq) }}>{r.objetivo ? pesos(r.objetivo) : '—'}</td>}
+                      <td style={{ ...P, borderBottom: borde, background: '#FFFBE6', minWidth: 130, ...sepIzq }}>
+                        <InputPesos
+                          value={manuales[r.p.id] || ''}
+                          placeholder={r.objetivo ? pesos(r.objetivo) : '$ 0'}
+                          onChange={(v) => setManuales((prev) => ({ ...prev, [r.p.id]: v }))}
+                          onBlur={() => guardarManual(r.p.id)}
+                          resaltado={esManual}
+                        />
+                        <div style={{ fontSize: 10.5, textAlign: 'right', color: esManual ? 'var(--orange)' : 'var(--muted)', marginTop: 2 }}>{esManual ? 'Precio manual' : 'Usa el redondeado'}</div>
+                      </td>
+                      {ver('descReal') && <td style={{ ...c, background: '#FFFBE6' }}>{r.usado ? r.descReal.toFixed(1) + '%' : '—'}</td>}
+                      {ver('piso') && <td style={{ ...c, color: 'var(--muted)', ...sepIzq }} title={`El Punto Troya compra a ${pesos(r.compraPT)} + IVA y vende a la lista (${pesos(r.lista)} + IVA)`}>{r.piso ? pesos(r.piso) : '—'}</td>}
+                      {ver('estado') && (
+                        <td style={{ ...c, ...(ver('piso') ? {} : sepIzq) }}>
+                          {r.vsPiso === null ? <span style={{ color: 'var(--muted)' }}>—</span> : r.vsPiso >= 0
+                            ? <b style={{ color: '#2e7d32' }}>✔ +{r.vsPiso.toFixed(1)}%</b>
+                            : <b style={{ color: '#DA231F' }}>⚠ {r.vsPiso.toFixed(1)}%</b>}
+                          {r.vsPiso !== null && r.vsPiso < 0 && r.margenPT !== null && (
+                            <div style={{ fontSize: 10.5, color: '#DA231F' }}>Punto Troya: margen {r.margenPT.toFixed(1)}%</div>
+                          )}
+                        </td>
                       )}
-                    </td>
-                    {r.porMedio.map((x, i) => (
-                      <td key={i} style={{ ...tdBase, ...NUM, borderBottom: borde, ...(i === 0 ? sepIzq : {}) }}>{colRent(x)}</td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      {mediosVis.map(({ i }, j) => (
+                        <td key={i} style={{ ...c, ...(j === 0 ? sepIzq : {}) }}>{colRent(r.porMedio[i])}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
     </div>
   );
 }
