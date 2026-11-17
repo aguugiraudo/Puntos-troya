@@ -328,8 +328,13 @@ export default function EcommercePage() {
     return <b style={{ color: colorRent(x.rent) }}>{x.rent.toFixed(1)}%</b>;
   };
 
+  // Ocupa casi todo el ancho de la pantalla, aunque el resto de la app use un contenedor angosto
+  const anchoCompleto: React.CSSProperties = {
+    width: 'calc(100vw - 48px)', maxWidth: 2200, position: 'relative', left: '50%', transform: 'translateX(-50%)', boxSizing: 'border-box',
+  };
+
   return (
-    <div>
+    <div style={anchoCompleto}>
       <div className="troya-header">
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', margin: 0 }}>Venta e-commerce</h1>
@@ -616,7 +621,7 @@ export default function EcommercePage() {
                   const c: React.CSSProperties = { ...P, ...NUM, borderBottom: borde };
                   return (
                     <tr key={r.p.id}>
-                      <td style={{ ...P, position: 'sticky', left: 0, zIndex: 1, background: '#fff', borderBottom: borde, minWidth: 200, maxWidth: 260 }}>
+                      <td style={{ ...P, position: 'sticky', left: 0, zIndex: 1, background: '#fff', borderBottom: borde, minWidth: 220, maxWidth: 340 }}>
                         <div style={{ fontWeight: 600, lineHeight: 1.25 }} title={r.p.nombre}>{r.p.nombre}</div>
                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>{r.p.codigo || 'Sin código'}</div>
                       </td>
