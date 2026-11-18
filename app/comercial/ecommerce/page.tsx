@@ -34,7 +34,7 @@ type Medio = { key: string; nombre: string; tipo: 'tarjeta' | 'transferencia'; c
 type Base = 'completo' | 'mp';
 type Vista = 'rent' | 'ganancia' | 'neto';
 
-const CONFIG_INICIAL: Config = { factor: '1.5703', descuento: '20', paso: '1000', modo: 'cercano', comision: '0', iva: '21', webConIva: true, cuotasDist: '3', ivaCostos: false, comTransf: '0.99', comTarjeta: '4.19' };
+const CONFIG_INICIAL: Config = { factor: '1.5703', descuento: '20', paso: '1000', modo: 'cercano', comision: '0', iva: '21', webConIva: false, cuotasDist: '3', ivaCostos: false, comTransf: '0.99', comTarjeta: '4.19' };
 
 const pesos = (n: number) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-AR');
 const num = (s: string | number | null | undefined) => {
@@ -88,6 +88,7 @@ const COLUMNAS: Array<{ k: string; label: string; grupo: string; defecto: boolea
   { k: 'conDesc', label: 'Con descuento', grupo: 'Precio web', defecto: false },
   { k: 'redondeado', label: 'Redondeado', grupo: 'Precio web', defecto: true },
   { k: 'descReal', label: 'Descuento real', grupo: 'Tu precio', defecto: true },
+  { k: 'cuotas', label: 'Cuotas máx.', grupo: 'Control Punto Troya', defecto: true },
   { k: 'piso', label: 'Piso web', grupo: 'Control Punto Troya', defecto: true },
   { k: 'estado', label: 'Estado vs. piso', grupo: 'Control Punto Troya', defecto: true },
 ];
@@ -107,6 +108,9 @@ export default function EcommercePage() {
   const [guardandoCfg, setGuardandoCfg] = useState(false);
   const [base, setBase] = useState<Base>('completo');
   const [vista, setVista] = useState<Vista>('rent');
+  const [cuotasCat, setCuotasCat] = useState<Record<string, string>>({});
+  const [cuotasProd, setCuotasProd] = useState<Record<string, string>>({});
+  const [tip, setTip] = useState<{ x: number; y: number; t: string } | null>(null);
   const [verCols, setVerCols] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [ancho, setAncho] = useState<{ ml: number; w: number } | null>(null);
@@ -118,7 +122,7 @@ export default function EcommercePage() {
   async function cargar() {
     setCargando(true);
     setError('');
-    const [p, c, m, pr, ld] = await Promise.all([
+    const [p, c, m, pr, ld, cc] = await Promise.all([
       supabase.from('productos')
         .select('id, nombre, codigo, categoria, costo_completo, costo_materia_prima, precio_lista')
         .order('categoria').order('nombre'),
@@ -126,12 +130,13 @@ export default function EcommercePage() {
       supabase.from('ecommerce_medios').select('*').order('orden'),
       supabase.from('ecommerce_precios').select('*'),
       supabase.from('listas_precio').select('codigo, descuento_porcentaje'),
+      supabase.from('ecommerce_cuotas_categoria').select('*'),
     ]);
     const filaPT = ((ld.data as any[]) || []).find((x) => x.codigo === 'punto_troya');
     if (filaPT) setDescPT(Number(filaPT.descuento_porcentaje) || 33);
     if (p.error) setError(p.error.message);
-    if (c.error || m.error || pr.error) {
-      setError('No se pudo leer las tablas de e-commerce. ¿Corriste el SQL? ' + (c.error?.message || m.error?.message || pr.error?.message));
+    if (c.error || m.error || pr.error || cc.error) {
+      setError('No se pudo leer las tablas de e-commerce. ¿Corriste el SQL? ' + (c.error?.message || m.error?.message || pr.error?.message || cc.error?.message));
     }
     setProductos((p.data as Producto[]) || []);
     if (c.data) {
@@ -147,8 +152,16 @@ export default function EcommercePage() {
     }
     setMedios(((m.data as any[]) || []).map((x) => ({ key: nuevaKey(), nombre: x.nombre, tipo: x.tipo === 'transferencia' ? 'transferencia' : 'tarjeta', cuotas: String(x.cuotas ?? '0'), costo: String(x.costo_pct ?? '0'), activo: !!x.activo })));
     const map: Record<string, string> = {};
-    ((pr.data as any[]) || []).forEach((x) => { if (x.precio_manual) map[x.producto_id] = String(Math.round(Number(x.precio_manual))); });
+    const mapC: Record<string, string> = {};
+    ((pr.data as any[]) || []).forEach((x) => {
+      if (x.precio_manual) map[x.producto_id] = String(Math.round(Number(x.precio_manual)));
+      if (x.cuotas_max) mapC[x.producto_id] = String(x.cuotas_max);
+    });
     setManuales(map);
+    setCuotasProd(mapC);
+    const mapCat: Record<string, string> = {};
+    ((cc.data as any[]) || []).forEach((x) => { mapCat[x.categoria] = String(x.cuotas); });
+    setCuotasCat(mapCat);
     setCargando(false);
   }
   useEffect(() => { cargar(); }, []);
@@ -204,6 +217,12 @@ export default function EcommercePage() {
       const { error: e2 } = await supabase.from('ecommerce_medios').insert(filas);
       if (e2) alert(e2.message);
     }
+    await supabase.from('ecommerce_cuotas_categoria').delete().neq('categoria', '___');
+    const filasC = Object.entries(cuotasCat).filter(([, v]) => num(v) > 0).map(([categoria, v]) => ({ categoria, cuotas: num(v) }));
+    if (filasC.length) {
+      const { error: e3 } = await supabase.from('ecommerce_cuotas_categoria').insert(filasC);
+      if (e3) alert(e3.message);
+    }
     setGuardandoCfg(false);
     setVerConfig(false);
     cargar();
@@ -217,8 +236,14 @@ export default function EcommercePage() {
       const { error: e } = await supabase.from('ecommerce_precios').upsert({ producto_id: id, precio_manual: v, updated_at: new Date().toISOString() });
       if (e) alert(e.message);
     } else {
-      await supabase.from('ecommerce_precios').delete().eq('producto_id', id);
+      await supabase.from('ecommerce_precios').update({ precio_manual: null }).eq('producto_id', id);
     }
+  }
+  async function guardarCuotasProd(id: string, v: string) {
+    setCuotasProd((prev) => ({ ...prev, [id]: v }));
+    if (!editar) return;
+    const { error: e } = await supabase.from('ecommerce_precios').upsert({ producto_id: id, cuotas_max: v ? num(v) : null, updated_at: new Date().toISOString() });
+    if (e) alert(e.message);
   }
   async function fijarTodosRedondeados() {
     if (!confirm('Esto guarda como precio final el precio redondeado de TODOS los productos (pisa los manuales). ¿Continuar?')) return;
@@ -229,7 +254,7 @@ export default function EcommercePage() {
   }
   async function borrarManuales() {
     if (!confirm('¿Borrar todos los precios manuales? Los productos vuelven al precio redondeado automático.')) return;
-    await supabase.from('ecommerce_precios').delete().neq('producto_id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('ecommerce_precios').update({ precio_manual: null }).neq('producto_id', '00000000-0000-0000-0000-000000000000');
     cargar();
   }
 
@@ -252,6 +277,18 @@ export default function EcommercePage() {
   const medioMax = [...activos].filter((m) => num(m.cuotas) > 0).sort((x, y) => num(y.cuotas) - num(x.cuotas))[0];
   const deltaPct = medioMax ? Math.max(0, num(medioMax.costo) * kCostos - costoDistPct) : 0;
 
+  // Cuotas máximas que se ofrecen de cada producto: la del producto, si no la de su categoría, si no sin límite (0)
+  const cuotasDe = (p: Producto) => {
+    const o = num(cuotasProd[p.id]);
+    if (o > 0) return o;
+    return num(cuotasCat[p.categoria || 'Sin categoría']);
+  };
+  const deltaPara = (limite: number) => {
+    const mm = [...activos].filter((m) => num(m.cuotas) > 0 && (limite === 0 || num(m.cuotas) <= limite)).sort((x, y) => num(y.cuotas) - num(x.cuotas))[0];
+    return mm ? Math.max(0, num(mm.costo) * kCostos - costoDistPct) : 0;
+  };
+  const opcionesCuotas = Array.from(new Set(activos.map((m) => num(m.cuotas)).filter((c) => c > 0))).sort((a, b) => a - b);
+
   const categorias = useMemo(() => Array.from(new Set(productos.map((p) => p.categoria || 'Sin categoría'))), [productos]);
 
   const calculados = useMemo(() => {
@@ -266,18 +303,21 @@ export default function EcommercePage() {
       const usado = manual > 0 ? manual : objetivo; // con IVA
       const descReal = web > 0 && usado > 0 ? (1 - usado / web) * 100 : 0;
       const ingreso = usado / k; // sin IVA
+      const lim = cuotasDe(p);
+      const deltaP = deltaPara(lim);
       const porMedio = activos.map((m) => {
+        const ofrece = lim === 0 || num(m.cuotas) <= lim;
         const neto = ingreso - (usado * costoVentaPct(m)) / 100;
-        const rent = ingreso > 0 && costo > 0 ? ((neto - costo) / ingreso) * 100 : null;
-        return { neto, rent, ganancia: neto - costo };
+        const rent = ofrece && ingreso > 0 && costo > 0 ? ((neto - costo) / ingreso) * 100 : null;
+        return { neto, rent, ganancia: neto - costo, ofrece };
       });
-      const piso = lista > 0 ? (lista * k) / (1 - deltaPct / 100) : 0;
+      const piso = lista > 0 ? (lista * k) / (1 - deltaP / 100) : 0;
       const vsPiso = piso > 0 && usado > 0 ? (usado / piso - 1) * 100 : null;
       const compraPT = lista * (1 - descPT / 100); // lo que paga el Punto Troya (sin IVA)
       const margenPT = compraPT > 0 && usado > 0 ? (usado / k / compraPT - 1) * 100 : null; // si tuviera que vender al precio web
-      return { p, lista, listaIva, costo, web, conDesc, objetivo, manual, usado, descReal, porMedio, piso, vsPiso, compraPT, margenPT };
+      return { p, lista, listaIva, costo, web, conDesc, objetivo, manual, usado, descReal, porMedio, piso, vsPiso, compraPT, margenPT, lim, deltaP };
     });
-  }, [productos, base, factor, desc, paso, cfg.modo, cfg.webConIva, comision, k, kCostos, descPT, deltaPct, manuales, medios, cfg.comTransf, cfg.comTarjeta]); // eslint-disable-line
+  }, [productos, base, factor, desc, paso, cfg.modo, cfg.webConIva, comision, k, kCostos, descPT, deltaPct, manuales, medios, cfg.comTransf, cfg.comTarjeta, cuotasProd, cuotasCat]); // eslint-disable-line
 
   // Descuento que habría que hacerle al precio web para volver a la lista con IVA
   const ratioWeb = factor * (cfg.webConIva ? 1 : k) / k;
@@ -339,7 +379,8 @@ export default function EcommercePage() {
   const td: React.CSSProperties = { padding: '10px 8px', textAlign: 'center', verticalAlign: 'middle', fontSize: 14, fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #F0EAE3', whiteSpace: 'nowrap' };
   const corto = (n: string) => n.replace(' sin interés', '');
   const mediosVis = activos.map((m, i) => ({ m, i })).filter((x) => verMedio(x.m.nombre));
-  const celdaMedio = (x: { rent: number | null; neto: number; ganancia: number }) => {
+  const celdaMedio = (x: { rent: number | null; neto: number; ganancia: number; ofrece: boolean }) => {
+    if (!x.ofrece) return <span style={{ color: 'var(--muted)' }} title="Este producto no se vende en tantas cuotas">—</span>;
     if (x.rent === null) return <span style={{ color: 'var(--muted)' }}>—</span>;
     if (vista === 'neto') return <b>{pesos(x.neto)}</b>;
     if (vista === 'ganancia') return <b style={{ color: x.ganancia >= 0 ? 'var(--ink)' : '#DA231F' }}>{pesos(x.ganancia)}</b>;
@@ -347,6 +388,29 @@ export default function EcommercePage() {
   };
   const tituloVista = vista === 'rent' ? 'rentabilidad' : vista === 'ganancia' ? 'ganancia' : 'neto sin IVA';
 
+  const niveles = Array.from(new Map(calculados.filter((r) => r.lista > 0).map((r) => [r.lim, r.deltaP] as [number, number])).entries()).sort((a, b) => b[0] - a[0]);
+  const mostrarTip = (e: React.MouseEvent, t: string) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTip({ x: Math.min(Math.max(8, r.left + r.width / 2 - 150), window.innerWidth - 316), y: r.bottom + 6, t });
+  };
+  const tipProps = (t: string) => ({ onMouseEnter: (e: React.MouseEvent) => mostrarTip(e, t), onMouseLeave: () => setTip(null) });
+  const TIPS: Record<string, string> = {
+    producto: 'Nombre y código del producto, como figuran en el sistema (Tango).',
+    costo: base === 'mp' ? 'Lo que te cuesta la materia prima del producto, sin IVA. Viene de Costos y precios.' : 'Lo que te cuesta fabricarlo, sin IVA: materia prima más mano de obra. Viene de Costos y precios.',
+    lista: `Precio de lista del sistema, sin IVA. Es el precio sugerido de venta al público: tus Puntos Troya lo toman de referencia (compran con ${descPT}% de descuento y venden a este precio).`,
+    listaIva: `La lista más el ${cfg.iva}% de IVA. Es lo que paga un cliente final que compra al precio de lista.`,
+    web: cfg.webConIva
+      ? `Lista × ${cfg.factor}. Es el precio "de vitrina" que lee la tienda, alto a propósito para después aplicarle descuento. El factor ya incluye el IVA.`
+      : `Lista × ${cfg.factor}, más ${cfg.iva}% de IVA. Es el precio "de vitrina" con IVA que ve el cliente en la tienda, alto a propósito para después aplicarle descuento.`,
+    conDesc: `El precio web menos el descuento objetivo (${cfg.descuento}%). Es el precio ideal, antes de redondear.`,
+    redondeado: 'El precio "lindo" más cercano al anterior, terminado en 999. Es la sugerencia automática del sistema.',
+    final: 'Lo que decidís publicar, con IVA. Si lo dejás vacío se usa el redondeado. Es lo único que se edita en la tabla.',
+    descReal: 'Cuánto descuento le hacés realmente al precio web con tu precio final. Puede no dar justo el descuento objetivo por el redondeo o por un precio cargado a mano.',
+    cuotas: 'Hasta cuántas cuotas sin interés ofrecés este producto. "Auto" toma las de su categoría (se definen en Configuración). Define su piso y qué medios de pago se calculan.',
+    piso: `El precio más bajo que es justo cobrar: lista con IVA, más los intereses de las cuotas que ofrecés, menos las ${cuotasDist} que la lista ya incluye. Ejemplo: con 9 cuotas se suman los intereses de 9 menos ${cuotasDist}. Por debajo de este precio le competís al Punto Troya y a los distribuidores.`,
+    estado: '✔ y el % que tu precio queda por encima del piso: está bien. ⚠ y el % que te falta: estás vendiendo más barato que el Punto Troya y le dejás sin margen. Pasá el mouse por el estado de cada fila para ver el margen que le queda.',
+  };
+  const tipMedio = (m: Medio) => `Qué te queda si cobrás con ${m.nombre}: ${vista === 'rent' ? 'ganancia en % del precio sin IVA' : vista === 'ganancia' ? 'ganancia en pesos' : 'neto en pesos, sin IVA'}, después de restar el costo del producto y el costo de cobro (${coma(costoVentaPct(m), 2)}% = comisión de Pago Nube + costo de las cuotas). Si el producto no se vende en tantas cuotas, aparece "—".`;
   const kpi = (titulo: string, valor: string, sub: string, color?: string) => (
     <div style={{ ...tarjeta, padding: '14px 16px', textAlign: 'center' }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)' }}>{titulo}</div>
@@ -355,7 +419,7 @@ export default function EcommercePage() {
     </div>
   );
 
-  const nCols = 2 + ['costo', 'lista', 'listaIva', 'web', 'conDesc', 'redondeado', 'descReal', 'piso', 'estado'].filter(ver).length + mediosVis.length;
+  const nCols = 2 + ['costo', 'lista', 'listaIva', 'web', 'conDesc', 'redondeado', 'descReal', 'cuotas', 'piso', 'estado'].filter(ver).length + mediosVis.length;
 
   return (
     <div ref={wrapRef} style={ancho ? { marginLeft: ancho.ml, width: ancho.w, boxSizing: 'border-box' } : undefined}>
@@ -371,6 +435,10 @@ export default function EcommercePage() {
       </div>
 
       {error && <div className="troya-vacio" style={{ color: 'var(--red)' }}>{error}</div>}
+
+      {tip && (
+        <div style={{ position: 'fixed', left: tip.x, top: tip.y, zIndex: 100, width: 300, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: '10px 12px', fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink)', textAlign: 'left', fontWeight: 400, textTransform: 'none', letterSpacing: 0, pointerEvents: 'none' }}>{tip.t}</div>
+      )}
 
       {/* Configuración */}
       {verConfig && (
@@ -472,6 +540,24 @@ export default function EcommercePage() {
           </div>
           <button className="troya-btn-secundario" onClick={() => setMedios((p) => [...p, { key: nuevaKey(), nombre: '', tipo: 'tarjeta', cuotas: '0', costo: '0', activo: true }])}>+ Agregar medio de pago</button>
 
+          <div style={{ marginTop: 22 }}>
+            <Titulo n="3" t="Cuotas máximas por categoría" />
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 10px' }}>
+              Hasta cuántas cuotas sin interés ofrecés en cada categoría. Define el piso de cada producto. Después podés cambiar un producto puntual desde la columna “Cuotas máx.”.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 10 }}>
+              {categorias.map((c) => (
+                <label key={c} style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 10, alignItems: 'center', fontSize: 14 }}>
+                  <span>{c}</span>
+                  <select className="troya-input" value={cuotasCat[c] || ''} onChange={(e) => setCuotasCat((p) => ({ ...p, [c]: e.target.value }))}>
+                    <option value="">Sin límite</option>
+                    {opcionesCuotas.map((n) => <option key={n} value={String(n)}>Hasta {n} cuotas</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: 10, marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
             <button className="troya-btn" disabled={guardandoCfg || !editar} onClick={guardarConfig}>{guardandoCfg ? 'Guardando…' : 'Guardar configuración'}</button>
             <button className="troya-btn-secundario" onClick={() => { setVerConfig(false); cargar(); }}>Cancelar</button>
@@ -488,7 +574,7 @@ export default function EcommercePage() {
       {/* Indicadores */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12, marginBottom: 14 }}>
         {kpi('Descuento para volver a la lista', ratioWeb >= 1 ? coma(descEquilibrio) + '%' : '—', 'el precio web queda por encima de la lista con IVA')}
-        {kpi('Cuotas extra sobre la lista', '+' + coma(deltaPct) + ' pts', medioMax ? `hasta ${medioMax.cuotas} cuotas vs. ${cuotasDist} incluidas` : 'sin cuotas activas')}
+        {kpi('Cuotas extra sobre la lista', '+' + coma(niveles.length ? Math.max(...niveles.map((n) => n[1])) : 0) + ' pts', niveles.length ? niveles.map(([c, d]) => `${c ? c + ' cuotas' : 'máx. activo'}: +${coma(d)}`).join(' · ') + ` (${cuotasDist} incluidas)` : 'sin productos')}
         {kpi('Precios cargados a mano', String(nManuales), `de ${calculados.length} productos`)}
         {kpi('Por debajo del piso', String(bajoPiso), `de ${conPrecio} productos con precio`, bajoPiso > 0 ? '#DA231F' : '#2e7d32')}
       </div>
@@ -571,19 +657,20 @@ export default function EcommercePage() {
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
               <tr>
-                <th style={{ ...th, textAlign: 'left', minWidth: 240, paddingLeft: 16 }}>Producto</th>
-                {ver('costo') && <th style={th}>{base === 'mp' ? 'Materia prima' : 'Costo completo'}</th>}
-                {ver('lista') && <th style={th}>Lista{subTh('sin IVA')}</th>}
-                {ver('listaIva') && <th style={th}>Lista{subTh('con IVA')}</th>}
-                {ver('web') && <th style={th}>Precio web{subTh(`lista × ${cfg.factor}`)}</th>}
-                {ver('conDesc') && <th style={th}>Con descuento{subTh(`−${cfg.descuento}%`)}</th>}
-                {ver('redondeado') && <th style={th}>Redondeado{subTh('sugerido')}</th>}
-                <th style={{ ...th, background: '#FFF3C4', color: 'var(--ink)', minWidth: 150 }}>Precio final{subTh('editable')}</th>
-                {ver('descReal') && <th style={th}>Descuento real{subTh('vs. precio web')}</th>}
-                {ver('piso') && <th style={th}>Piso web{subTh('lista + IVA + cuotas')}</th>}
-                {ver('estado') && <th style={th}>Estado{subTh('vs. el piso')}</th>}
+                <th {...tipProps(TIPS.producto)} style={{ ...th, textAlign: 'left', minWidth: 240, paddingLeft: 16, cursor: 'help' }}>Producto</th>
+                {ver('costo') && <th {...tipProps(TIPS.costo)} style={{ ...th, cursor: 'help' }}>{base === 'mp' ? 'Materia prima' : 'Costo completo'}</th>}
+                {ver('lista') && <th {...tipProps(TIPS.lista)} style={{ ...th, cursor: 'help' }}>Lista{subTh('sin IVA')}</th>}
+                {ver('listaIva') && <th {...tipProps(TIPS.listaIva)} style={{ ...th, cursor: 'help' }}>Lista{subTh('con IVA')}</th>}
+                {ver('web') && <th {...tipProps(TIPS.web)} style={{ ...th, cursor: 'help' }}>Precio web{subTh(cfg.webConIva ? `lista × ${cfg.factor}` : `lista × ${cfg.factor} + IVA`)}</th>}
+                {ver('conDesc') && <th {...tipProps(TIPS.conDesc)} style={{ ...th, cursor: 'help' }}>Con descuento{subTh(`−${cfg.descuento}%`)}</th>}
+                {ver('redondeado') && <th {...tipProps(TIPS.redondeado)} style={{ ...th, cursor: 'help' }}>Redondeado{subTh('sugerido')}</th>}
+                <th {...tipProps(TIPS.final)} style={{ ...th, background: '#FFF3C4', color: 'var(--ink)', minWidth: 150, cursor: 'help' }}>Precio final{subTh('editable')}</th>
+                {ver('descReal') && <th {...tipProps(TIPS.descReal)} style={{ ...th, cursor: 'help' }}>Descuento real{subTh('vs. precio web')}</th>}
+                {ver('cuotas') && <th {...tipProps(TIPS.cuotas)} style={{ ...th, cursor: 'help' }}>Cuotas máx.{subTh('de este producto')}</th>}
+                {ver('piso') && <th {...tipProps(TIPS.piso)} style={{ ...th, cursor: 'help' }}>Piso web{subTh('lista + IVA + cuotas')}</th>}
+                {ver('estado') && <th {...tipProps(TIPS.estado)} style={{ ...th, cursor: 'help' }}>Estado{subTh('vs. el piso')}</th>}
                 {mediosVis.map(({ m }, j) => (
-                  <th key={m.key} style={{ ...th, ...(j === 0 ? { borderLeft: '1px solid var(--line)' } : {}) }}>
+                  <th key={m.key} {...tipProps(tipMedio(m))} style={{ ...th, cursor: 'help', ...(j === 0 ? { borderLeft: '1px solid var(--line)' } : {}) }}>
                     {corto(m.nombre)}
                     {subTh(`costo de cobro ${coma(costoVentaPct(m), 2)}%`)}
                   </th>
@@ -634,6 +721,20 @@ export default function EcommercePage() {
                       <div style={{ fontSize: 11, marginTop: 3, color: esManual ? 'var(--orange)' : 'var(--muted)' }}>{esManual ? 'precio manual' : 'automático'}</div>
                     </td>
                     {ver('descReal') && <td style={td}>{r.usado ? `−${coma(r.descReal)}%` : '—'}</td>}
+                    {ver('cuotas') && (
+                      <td style={td}>
+                        <select
+                          className="troya-input"
+                          style={{ width: '100%', minWidth: 110, textAlign: 'center', fontWeight: cuotasProd[r.p.id] ? 700 : 400 }}
+                          disabled={!editar}
+                          value={cuotasProd[r.p.id] || ''}
+                          onChange={(e) => guardarCuotasProd(r.p.id, e.target.value)}
+                        >
+                          <option value="">{num(cuotasCat[r.p.categoria || 'Sin categoría']) > 0 ? `Auto · ${cuotasCat[r.p.categoria || 'Sin categoría']}` : 'Auto · sin límite'}</option>
+                          {opcionesCuotas.map((n) => <option key={n} value={String(n)}>{n} cuotas</option>)}
+                        </select>
+                      </td>
+                    )}
                     {ver('piso') && <td style={{ ...td, color: 'var(--muted)' }}>{r.piso ? pesos(r.piso) : '—'}</td>}
                     {ver('estado') && (
                       <td style={td} title={r.margenPT !== null ? `Si el Punto Troya tuviera que igualar tu precio, su margen sería ${coma(r.margenPT)}% (a precio de lista gana ${coma((1 / (1 - descPT / 100) - 1) * 100)}%)` : ''}>
