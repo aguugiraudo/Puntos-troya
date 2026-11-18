@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
@@ -32,6 +32,7 @@ type Config = {
 type Medio = { key: string; nombre: string; tipo: 'tarjeta' | 'transferencia'; cuotas: string; costo: string; activo: boolean };
 
 type Base = 'completo' | 'mp';
+type Vista = 'rent' | 'ganancia' | 'neto';
 
 const CONFIG_INICIAL: Config = { factor: '1.5703', descuento: '20', paso: '1000', modo: 'cercano', comision: '0', iva: '21', webConIva: true, cuotasDist: '3', ivaCostos: false, comTransf: '0.99', comTarjeta: '4.19' };
 
@@ -78,12 +79,17 @@ function InputPesos({ value, onChange, onBlur, placeholder, resaltado }: {
   );
 }
 
-// Columnas opcionales (por defecto ocultas; el detalle de cada fila ya muestra todo)
-const COLUMNAS: Array<{ k: string; label: string }> = [
-  { k: 'costo', label: 'Costo' },
-  { k: 'lista', label: 'Lista sin IVA' },
-  { k: 'conDesc', label: 'Con descuento' },
-  { k: 'redondeado', label: 'Redondeado' },
+// Columnas que se pueden mostrar u ocultar
+const COLUMNAS: Array<{ k: string; label: string; grupo: string; defecto: boolean }> = [
+  { k: 'costo', label: 'Costo', grupo: 'Datos del sistema', defecto: false },
+  { k: 'lista', label: 'Lista sin IVA', grupo: 'Datos del sistema', defecto: false },
+  { k: 'listaIva', label: 'Lista con IVA', grupo: 'Datos del sistema', defecto: true },
+  { k: 'web', label: 'Precio web', grupo: 'Precio web', defecto: true },
+  { k: 'conDesc', label: 'Con descuento', grupo: 'Precio web', defecto: false },
+  { k: 'redondeado', label: 'Redondeado', grupo: 'Precio web', defecto: true },
+  { k: 'descReal', label: 'Descuento real', grupo: 'Tu precio', defecto: true },
+  { k: 'piso', label: 'Piso web', grupo: 'Control Punto Troya', defecto: true },
+  { k: 'estado', label: 'Estado vs. piso', grupo: 'Control Punto Troya', defecto: true },
 ];
 
 export default function EcommercePage() {
@@ -100,8 +106,10 @@ export default function EcommercePage() {
   const [verConfig, setVerConfig] = useState(false);
   const [guardandoCfg, setGuardandoCfg] = useState(false);
   const [base, setBase] = useState<Base>('completo');
-  const [medioSel, setMedioSel] = useState('');
-  const [abiertos, setAbiertos] = useState<Record<string, boolean>>({});
+  const [vista, setVista] = useState<Vista>('rent');
+  const [verCols, setVerCols] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [ancho, setAncho] = useState<{ ml: number; w: number } | null>(null);
   const [buscar, setBuscar] = useState('');
   const [categoria, setCategoria] = useState('');
   const [descPT, setDescPT] = useState(33);
@@ -146,15 +154,39 @@ export default function EcommercePage() {
   useEffect(() => { cargar(); }, []);
   useEffect(() => {
     try {
-      const g = localStorage.getItem('ecom_cols2');
+      const g = localStorage.getItem('ecom_cols3');
       if (g) setCols(JSON.parse(g));
     } catch { /* sin almacenamiento: se usan los valores por defecto */ }
   }, []);
   function cambiarCols(n: Record<string, boolean>) {
     setCols(n);
-    try { localStorage.setItem('ecom_cols2', JSON.stringify(n)); } catch { /* ignorar */ }
+    try { localStorage.setItem('ecom_cols3', JSON.stringify(n)); } catch { /* ignorar */ }
   }
-  const ver = (k: string) => cols[k] === true;
+  const ver = (k: string) => (k in cols ? cols[k] !== false : COLUMNAS.find((c) => c.k === k)?.defecto ?? true);
+  const verMedio = (nombre: string) => cols['m:' + nombre] !== false;
+  function mostrarTodas(v: boolean) {
+    const n: Record<string, boolean> = {};
+    COLUMNAS.forEach((c) => { n[c.k] = v; });
+    activos.forEach((m) => { n['m:' + m.nombre] = v; });
+    cambiarCols(n);
+  }
+  function restablecerCols() { cambiarCols({}); }
+
+  // Usa todo el ancho de la ventana, aunque el contenedor de la app sea más angosto
+  useEffect(() => {
+    function medir() {
+      const el = wrapRef.current;
+      const p = el?.parentElement;
+      if (!el || !p) return;
+      const cs = getComputedStyle(p);
+      const left = p.getBoundingClientRect().left + parseFloat(cs.paddingLeft || '0');
+      const vw = document.documentElement.clientWidth;
+      setAncho({ ml: -(left - 24), w: vw - 48 });
+    }
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
 
   // ---------- Configuración ----------
   async function guardarConfig() {
@@ -258,12 +290,11 @@ export default function EcommercePage() {
     return true;
   });
 
-  const idxSel = Math.max(0, activos.findIndex((m) => m.nombre === medioSel));
-  const medioActual = activos[idxSel];
-  const promedioSel = (() => {
-    const v = calculados.map((r) => r.porMedio[idxSel]?.rent).filter((x): x is number => x !== null && x !== undefined);
+  const promedios = activos.map((_, idx) => {
+    const v = calculados.map((r) => r.porMedio[idx]?.rent).filter((x): x is number => x !== null && x !== undefined);
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
-  })();
+  });
+  const nManuales = calculados.filter((r) => r.manual > 0).length;
   const bajoPiso = calculados.filter((r) => r.vsPiso !== null && r.vsPiso < 0).length;
   const conPrecio = calculados.filter((r) => r.vsPiso !== null).length;
   const coma = (n: number, d = 1) => n.toFixed(d).replace('.', ',');
@@ -301,12 +332,20 @@ export default function EcommercePage() {
   const tarjeta: React.CSSProperties = { background: '#fff', border: '1px solid var(--line)', borderRadius: 12 };
   const th: React.CSSProperties = {
     position: 'sticky', top: 0, zIndex: 3, background: '#fff', borderBottom: '1px solid var(--line)',
-    padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: 0.4, color: 'var(--muted)', whiteSpace: 'nowrap', verticalAlign: 'middle',
+    padding: '10px 8px', textAlign: 'center', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: 0.3, color: 'var(--muted)', verticalAlign: 'middle', lineHeight: 1.25,
   };
   const subTh = (t: string) => <div style={{ textTransform: 'none', fontWeight: 400, letterSpacing: 0, marginTop: 2 }}>{t}</div>;
-  const td: React.CSSProperties = { padding: '12px 12px', textAlign: 'center', verticalAlign: 'middle', fontSize: 14, fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #F0EAE3', whiteSpace: 'nowrap' };
+  const td: React.CSSProperties = { padding: '10px 8px', textAlign: 'center', verticalAlign: 'middle', fontSize: 14, fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #F0EAE3', whiteSpace: 'nowrap' };
   const corto = (n: string) => n.replace(' sin interés', '');
+  const mediosVis = activos.map((m, i) => ({ m, i })).filter((x) => verMedio(x.m.nombre));
+  const celdaMedio = (x: { rent: number | null; neto: number; ganancia: number }) => {
+    if (x.rent === null) return <span style={{ color: 'var(--muted)' }}>—</span>;
+    if (vista === 'neto') return <b>{pesos(x.neto)}</b>;
+    if (vista === 'ganancia') return <b style={{ color: x.ganancia >= 0 ? 'var(--ink)' : '#DA231F' }}>{pesos(x.ganancia)}</b>;
+    return <b style={{ color: colorRent(x.rent) }}>{coma(x.rent)}%</b>;
+  };
+  const tituloVista = vista === 'rent' ? 'rentabilidad' : vista === 'ganancia' ? 'ganancia' : 'neto sin IVA';
 
   const kpi = (titulo: string, valor: string, sub: string, color?: string) => (
     <div style={{ ...tarjeta, padding: '14px 16px', textAlign: 'center' }}>
@@ -316,11 +355,10 @@ export default function EcommercePage() {
     </div>
   );
 
-  const nExtra = COLUMNAS.filter((c) => ver(c.k)).length;
-  const nCols = 7 + nExtra;
+  const nCols = 2 + ['costo', 'lista', 'listaIva', 'web', 'conDesc', 'redondeado', 'descReal', 'piso', 'estado'].filter(ver).length + mediosVis.length;
 
   return (
-    <div>
+    <div ref={wrapRef} style={ancho ? { marginLeft: ancho.ml, width: ancho.w, boxSizing: 'border-box' } : undefined}>
       <div className="troya-header">
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', margin: 0 }}>Venta e-commerce</h1>
@@ -451,11 +489,11 @@ export default function EcommercePage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12, marginBottom: 14 }}>
         {kpi('Descuento para volver a la lista', ratioWeb >= 1 ? coma(descEquilibrio) + '%' : '—', 'el precio web queda por encima de la lista con IVA')}
         {kpi('Cuotas extra sobre la lista', '+' + coma(deltaPct) + ' pts', medioMax ? `hasta ${medioMax.cuotas} cuotas vs. ${cuotasDist} incluidas` : 'sin cuotas activas')}
-        {kpi('Rentabilidad promedio', promedioSel === null ? '—' : coma(promedioSel) + '%', medioActual ? `cobrando por ${corto(medioActual.nombre)}` : 'sin medios activos', promedioSel === null ? undefined : colorRent(promedioSel))}
+        {kpi('Precios cargados a mano', String(nManuales), `de ${calculados.length} productos`)}
         {kpi('Por debajo del piso', String(bajoPiso), `de ${conPrecio} productos con precio`, bajoPiso > 0 ? '#DA231F' : '#2e7d32')}
       </div>
 
-      {/* Filtros */}
+      {/* Filtros y vista */}
       <div style={{ ...tarjeta, padding: 16, marginBottom: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
           <label>
@@ -477,22 +515,16 @@ export default function EcommercePage() {
             </select>
           </label>
           <label>
-            <div style={etiqueta}>Rentabilidad según el medio de pago</div>
-            <select className="troya-input" style={{ width: '100%' }} value={medioActual?.nombre || ''} onChange={(e) => setMedioSel(e.target.value)}>
-              {activos.map((m) => <option key={m.key} value={m.nombre}>{m.nombre}</option>)}
+            <div style={etiqueta}>En los medios de pago mostrar</div>
+            <select className="troya-input" style={{ width: '100%' }} value={vista} onChange={(e) => setVista(e.target.value as Vista)}>
+              <option value="rent">Rentabilidad (%)</option>
+              <option value="ganancia">Ganancia ($)</option>
+              <option value="neto">Neto sin IVA ($)</option>
             </select>
           </label>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
-            <span style={{ color: 'var(--muted)' }}>Columnas extra:</span>
-            {COLUMNAS.map((c) => (
-              <label key={c.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                <input type="checkbox" checked={ver(c.k)} onChange={(e) => cambiarCols({ ...cols, [c.k]: e.target.checked })} />
-                {c.label}
-              </label>
-            ))}
-          </div>
+          <button className="troya-btn-secundario" onClick={() => setVerCols((v) => !v)}>{verCols ? 'Cerrar columnas' : 'Mostrar / ocultar columnas'}</button>
           {editar && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="troya-btn-secundario" onClick={fijarTodosRedondeados}>Usar el redondeado en todos</button>
@@ -500,131 +532,125 @@ export default function EcommercePage() {
             </div>
           )}
         </div>
+        {verCols && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
+              {Array.from(new Set(COLUMNAS.map((c) => c.grupo))).map((g) => (
+                <div key={g}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 6 }}>{g}</div>
+                  {COLUMNAS.filter((c) => c.grupo === g).map((c) => (
+                    <label key={c.k} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '2px 0' }}>
+                      <input type="checkbox" checked={ver(c.k)} onChange={(e) => cambiarCols({ ...cols, [c.k]: e.target.checked })} />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              ))}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 6 }}>Medios de pago</div>
+                {activos.map((m) => (
+                  <label key={m.key} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '2px 0' }}>
+                    <input type="checkbox" checked={verMedio(m.nombre)} onChange={(e) => cambiarCols({ ...cols, ['m:' + m.nombre]: e.target.checked })} />
+                    {m.nombre}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+              <button className="troya-btn-secundario" onClick={() => mostrarTodas(true)}>Mostrar todas</button>
+              <button className="troya-btn-secundario" onClick={() => mostrarTodas(false)}>Ocultar todas</button>
+              <button className="troya-btn-secundario" onClick={restablecerCols}>Volver a las de siempre</button>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Siempre se muestran el producto y el precio final. Tu elección queda guardada en este navegador.</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {cargando ? <div className="troya-vacio">Cargando…</div> : (
-        <div style={{ ...tarjeta, overflow: 'auto', maxHeight: '70vh' }}>
+        <div style={{ ...tarjeta, overflow: 'auto', maxHeight: '72vh' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
               <tr>
-                <th style={{ ...th, width: 40 }} />
-                <th style={{ ...th, textAlign: 'left', minWidth: 260 }}>Producto</th>
+                <th style={{ ...th, textAlign: 'left', minWidth: 240, paddingLeft: 16 }}>Producto</th>
                 {ver('costo') && <th style={th}>{base === 'mp' ? 'Materia prima' : 'Costo completo'}</th>}
                 {ver('lista') && <th style={th}>Lista{subTh('sin IVA')}</th>}
-                <th style={th}>Lista{subTh('con IVA')}</th>
-                <th style={th}>Precio web{subTh(`lista × ${cfg.factor}`)}</th>
+                {ver('listaIva') && <th style={th}>Lista{subTh('con IVA')}</th>}
+                {ver('web') && <th style={th}>Precio web{subTh(`lista × ${cfg.factor}`)}</th>}
                 {ver('conDesc') && <th style={th}>Con descuento{subTh(`−${cfg.descuento}%`)}</th>}
                 {ver('redondeado') && <th style={th}>Redondeado{subTh('sugerido')}</th>}
-                <th style={{ ...th, background: '#FFF3C4', color: 'var(--ink)' }}>Precio final{subTh('editable')}</th>
-                <th style={th}>Control Punto Troya{subTh('piso y estado')}</th>
-                <th style={th}>Rentabilidad{subTh(medioActual ? corto(medioActual.nombre) : '')}</th>
+                <th style={{ ...th, background: '#FFF3C4', color: 'var(--ink)', minWidth: 150 }}>Precio final{subTh('editable')}</th>
+                {ver('descReal') && <th style={th}>Descuento real{subTh('vs. precio web')}</th>}
+                {ver('piso') && <th style={th}>Piso web{subTh('lista + IVA + cuotas')}</th>}
+                {ver('estado') && <th style={th}>Estado{subTh('vs. el piso')}</th>}
+                {mediosVis.map(({ m }, j) => (
+                  <th key={m.key} style={{ ...th, ...(j === 0 ? { borderLeft: '1px solid var(--line)' } : {}) }}>
+                    {corto(m.nombre)}
+                    {subTh(`costo de cobro ${coma(costoVentaPct(m), 2)}%`)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
+              {mediosVis.length > 0 && (
+                <tr style={{ background: 'var(--tint-orange)' }}>
+                  <td colSpan={nCols - mediosVis.length} style={{ ...td, textAlign: 'left', paddingLeft: 16, fontWeight: 700, fontSize: 13, background: 'var(--tint-orange)' }}>
+                    Promedio de {tituloVista} de todos los productos
+                  </td>
+                  {mediosVis.map(({ i }, j) => {
+                    const v = promedios[i];
+                    return (
+                      <td key={i} style={{ ...td, background: 'var(--tint-orange)', fontWeight: 700, color: v === null || vista !== 'rent' ? 'var(--muted)' : colorRent(v), ...(j === 0 ? { borderLeft: '1px solid var(--line)' } : {}) }}>
+                        {v === null || vista !== 'rent' ? '' : coma(v) + '%'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              )}
               {visibles.length === 0 && (
-                <tr><td colSpan={nCols + 1} className="troya-vacio">No hay productos para mostrar.</td></tr>
+                <tr><td colSpan={nCols} className="troya-vacio">No hay productos para mostrar.</td></tr>
               )}
               {visibles.map((r) => {
                 const esManual = r.manual > 0;
-                const abierto = !!abiertos[r.p.id];
-                const x = r.porMedio[idxSel];
                 return (
-                  <Fragment key={r.p.id}>
-                    <tr>
-                      <td style={{ ...td, padding: '12px 4px 12px 12px' }}>
-                        <button
-                          onClick={() => setAbiertos((p) => ({ ...p, [r.p.id]: !p[r.p.id] }))}
-                          title={abierto ? 'Ocultar detalle' : 'Ver detalle y todos los medios de pago'}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)' }}
-                        >{abierto ? '▾' : '▸'}</button>
-                      </td>
-                      <td style={{ ...td, textAlign: 'left', whiteSpace: 'normal', minWidth: 260, maxWidth: 380 }}>
-                        <div style={{ fontWeight: 600, lineHeight: 1.25 }}>{r.p.nombre}</div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{r.p.codigo || 'Sin código'}</div>
-                      </td>
-                      {ver('costo') && <td style={{ ...td, color: 'var(--muted)' }}>{r.costo ? pesos(r.costo) : '—'}</td>}
-                      {ver('lista') && <td style={{ ...td, color: 'var(--muted)' }}>{r.lista ? pesos(r.lista) : '—'}</td>}
-                      <td style={{ ...td, color: 'var(--muted)' }}>{r.lista ? pesos(r.listaIva) : '—'}</td>
-                      <td style={td}>{r.web ? pesos(r.web) : '—'}</td>
-                      {ver('conDesc') && <td style={td}>{r.conDesc ? pesos(r.conDesc) : '—'}</td>}
-                      {ver('redondeado') && <td style={td}>{r.objetivo ? pesos(r.objetivo) : '—'}</td>}
-                      <td style={{ ...td, background: '#FFFBE6', minWidth: 160 }}>
-                        <InputPesos
-                          value={manuales[r.p.id] || ''}
-                          placeholder={r.objetivo ? pesos(r.objetivo) : '$ 0'}
-                          onChange={(v) => setManuales((prev) => ({ ...prev, [r.p.id]: v }))}
-                          onBlur={() => guardarManual(r.p.id)}
-                          resaltado={esManual}
-                        />
-                        <div style={{ fontSize: 11, marginTop: 4, color: esManual ? 'var(--orange)' : 'var(--muted)' }}>
-                          {r.usado ? `−${coma(r.descReal)}% vs. web · ` : ''}{esManual ? 'manual' : 'automático'}
-                        </div>
-                      </td>
-                      <td style={td}>
+                  <tr key={r.p.id}>
+                    <td style={{ ...td, textAlign: 'left', whiteSpace: 'normal', paddingLeft: 16, minWidth: 240 }}>
+                      <div style={{ fontWeight: 600, lineHeight: 1.25 }}>{r.p.nombre}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{r.p.codigo || 'Sin código'}</div>
+                    </td>
+                    {ver('costo') && <td style={{ ...td, color: 'var(--muted)' }}>{r.costo ? pesos(r.costo) : '—'}</td>}
+                    {ver('lista') && <td style={{ ...td, color: 'var(--muted)' }}>{r.lista ? pesos(r.lista) : '—'}</td>}
+                    {ver('listaIva') && <td style={{ ...td, color: 'var(--muted)' }}>{r.lista ? pesos(r.listaIva) : '—'}</td>}
+                    {ver('web') && <td style={td}>{r.web ? pesos(r.web) : '—'}</td>}
+                    {ver('conDesc') && <td style={td}>{r.conDesc ? pesos(r.conDesc) : '—'}</td>}
+                    {ver('redondeado') && <td style={td}>{r.objetivo ? pesos(r.objetivo) : '—'}</td>}
+                    <td style={{ ...td, background: '#FFFBE6' }}>
+                      <InputPesos
+                        value={manuales[r.p.id] || ''}
+                        placeholder={r.objetivo ? pesos(r.objetivo) : '$ 0'}
+                        onChange={(v) => setManuales((prev) => ({ ...prev, [r.p.id]: v }))}
+                        onBlur={() => guardarManual(r.p.id)}
+                        resaltado={esManual}
+                      />
+                      <div style={{ fontSize: 11, marginTop: 3, color: esManual ? 'var(--orange)' : 'var(--muted)' }}>{esManual ? 'precio manual' : 'automático'}</div>
+                    </td>
+                    {ver('descReal') && <td style={td}>{r.usado ? `−${coma(r.descReal)}%` : '—'}</td>}
+                    {ver('piso') && <td style={{ ...td, color: 'var(--muted)' }}>{r.piso ? pesos(r.piso) : '—'}</td>}
+                    {ver('estado') && (
+                      <td style={td} title={r.margenPT !== null ? `Si el Punto Troya tuviera que igualar tu precio, su margen sería ${coma(r.margenPT)}% (a precio de lista gana ${coma((1 / (1 - descPT / 100) - 1) * 100)}%)` : ''}>
                         {r.vsPiso === null ? <span style={{ color: 'var(--muted)' }}>—</span> : (
-                          <>
-                            <span style={{
-                              display: 'inline-block', padding: '3px 12px', borderRadius: 999, fontWeight: 700, fontSize: 13,
-                              background: r.vsPiso >= 0 ? '#E7F5E8' : '#FDECEA', color: r.vsPiso >= 0 ? '#2e7d32' : '#DA231F',
-                            }}>
-                              {r.vsPiso >= 0 ? '✔ +' : '⚠ '}{coma(r.vsPiso)}%
-                            </span>
-                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                              piso {pesos(r.piso)}
-                            </div>
-                          </>
+                          <span style={{
+                            display: 'inline-block', padding: '3px 12px', borderRadius: 999, fontWeight: 700, fontSize: 13,
+                            background: r.vsPiso >= 0 ? '#E7F5E8' : '#FDECEA', color: r.vsPiso >= 0 ? '#2e7d32' : '#DA231F',
+                          }}>
+                            {r.vsPiso >= 0 ? '✔ +' : '⚠ '}{coma(r.vsPiso)}%
+                          </span>
                         )}
                       </td>
-                      <td style={td}>
-                        {x && x.rent !== null
-                          ? <b style={{ fontSize: 16, color: colorRent(x.rent) }}>{coma(x.rent)}%</b>
-                          : <span style={{ color: 'var(--muted)' }}>—</span>}
-                      </td>
-                    </tr>
-                    {abierto && (
-                      <tr>
-                        <td colSpan={nCols + 1} style={{ background: '#FAF7F3', borderBottom: '1px solid #F0EAE3', padding: '16px 20px' }}>
-                          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                            <div style={{ minWidth: 260 }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 8 }}>Cómo se arma el precio</div>
-                              {[
-                                ['Lista sin IVA', r.lista ? pesos(r.lista) : '—'],
-                                ['Lista con IVA', r.lista ? pesos(r.listaIva) : '—'],
-                                [`Precio web (× ${cfg.factor})`, r.web ? pesos(r.web) : '—'],
-                                [`Con ${cfg.descuento}% de descuento`, r.conDesc ? pesos(r.conDesc) : '—'],
-                                ['Redondeado', r.objetivo ? pesos(r.objetivo) : '—'],
-                                [base === 'mp' ? 'Costo (materia prima)' : 'Costo completo', r.costo ? pesos(r.costo) : '—'],
-                                ['Compra del Punto Troya (sin IVA)', r.compraPT ? pesos(r.compraPT) : '—'],
-                              ].map(([t, v]) => (
-                                <div key={t} style={{ display: 'flex', justifyContent: 'space-between', gap: 24, fontSize: 13, padding: '3px 0' }}>
-                                  <span style={{ color: 'var(--muted)' }}>{t}</span><b>{v}</b>
-                                </div>
-                              ))}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 320 }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', marginBottom: 8 }}>Qué te queda según cómo cobrás</div>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
-                                {activos.map((m, i) => {
-                                  const y = r.porMedio[i];
-                                  return (
-                                    <div key={m.key} style={{ ...tarjeta, padding: '10px 12px', textAlign: 'center' }}>
-                                      <div style={{ fontSize: 12, fontWeight: 600 }}>{corto(m.nombre)}</div>
-                                      <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-display)', color: y.rent === null ? 'var(--muted)' : colorRent(y.rent) }}>
-                                        {y.rent === null ? '—' : coma(y.rent) + '%'}
-                                      </div>
-                                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>neto sin IVA {pesos(y.neto)}</div>
-                                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>ganancia {pesos(y.ganancia)}</div>
-                                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>costo de cobro {coma(costoVentaPct(m), 2)}%</div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
                     )}
-                  </Fragment>
+                    {mediosVis.map(({ i }, j) => (
+                      <td key={i} style={{ ...td, ...(j === 0 ? { borderLeft: '1px solid #F0EAE3' } : {}) }}>{celdaMedio(r.porMedio[i])}</td>
+                    ))}
+                  </tr>
                 );
               })}
             </tbody>
