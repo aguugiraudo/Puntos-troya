@@ -27,6 +27,7 @@ type Config = {
   ivaCostos: boolean; // true = a los costos de cobro se les suma IVA (no recuperable)
   comTransf: string; // % comisión de cobro por transferencia
   comTarjeta: string; // % comisión de cobro con tarjeta (según plazo de retiro elegido)
+  descTransf: string; // % de descuento que la tienda hace al pagar por transferencia
 };
 
 type Medio = { key: string; nombre: string; tipo: 'tarjeta' | 'transferencia'; cuotas: string; costo: string; activo: boolean };
@@ -34,7 +35,7 @@ type Medio = { key: string; nombre: string; tipo: 'tarjeta' | 'transferencia'; c
 type Base = 'completo' | 'mp';
 type Vista = 'rent' | 'ganancia' | 'neto';
 
-const CONFIG_INICIAL: Config = { factor: '1.5703', descuento: '20', paso: '1000', modo: 'cercano', comision: '0', iva: '21', webConIva: false, cuotasDist: '3', ivaCostos: false, comTransf: '0.99', comTarjeta: '4.19' };
+const CONFIG_INICIAL: Config = { factor: '1.5703', descuento: '20', paso: '1000', modo: 'cercano', comision: '0', iva: '21', webConIva: false, cuotasDist: '3', ivaCostos: false, comTransf: '0.99', comTarjeta: '4.19', descTransf: '20' };
 
 const pesos = (n: number) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-AR');
 const num = (s: string | number | null | undefined) => {
@@ -88,6 +89,7 @@ const COLUMNAS: Array<{ k: string; label: string; grupo: string; defecto: boolea
   { k: 'conDesc', label: 'Con descuento', grupo: 'Precio web', defecto: false },
   { k: 'redondeado', label: 'Redondeado', grupo: 'Precio web', defecto: true },
   { k: 'descReal', label: 'Descuento real', grupo: 'Tu precio', defecto: true },
+  { k: 'precioTransf', label: 'Precio por transferencia', grupo: 'Tu precio', defecto: true },
   { k: 'cuotas', label: 'Cuotas máx.', grupo: 'Control Punto Troya', defecto: true },
   { k: 'piso', label: 'Piso web', grupo: 'Control Punto Troya', defecto: true },
   { k: 'estado', label: 'Estado vs. piso', grupo: 'Control Punto Troya', defecto: true },
@@ -148,6 +150,7 @@ export default function EcommercePage() {
         iva: String(x.iva_pct ?? '21'), webConIva: x.web_incluye_iva ?? true,
         cuotasDist: String(x.cuotas_distribuidor ?? '3'), ivaCostos: x.iva_en_costos ?? false,
         comTransf: String(x.comision_transferencia ?? '0.99'), comTarjeta: String(x.comision_tarjeta ?? '4.19'),
+        descTransf: String(x.descuento_transferencia ?? '20'),
       });
     }
     setMedios(((m.data as any[]) || []).map((x) => ({ key: nuevaKey(), nombre: x.nombre, tipo: x.tipo === 'transferencia' ? 'transferencia' : 'tarjeta', cuotas: String(x.cuotas ?? '0'), costo: String(x.costo_pct ?? '0'), activo: !!x.activo })));
@@ -209,6 +212,7 @@ export default function EcommercePage() {
       redondeo_modo: cfg.modo, comision_tienda_pct: num(cfg.comision),
       iva_pct: num(cfg.iva), web_incluye_iva: cfg.webConIva, cuotas_distribuidor: num(cfg.cuotasDist), iva_en_costos: cfg.ivaCostos,
       comision_transferencia: num(cfg.comTransf), comision_tarjeta: num(cfg.comTarjeta),
+      descuento_transferencia: num(cfg.descTransf),
     });
     if (e1) { alert(e1.message); setGuardandoCfg(false); return; }
     await supabase.from('ecommerce_medios').delete().neq('nombre', '___');
@@ -266,6 +270,9 @@ export default function EcommercePage() {
   const k = 1 + num(cfg.iva) / 100; // 1,21
   const kCostos = cfg.ivaCostos ? k : 1;
   const activos = medios.filter((m) => m.activo && m.nombre.trim());
+  const dTransf = num(cfg.descTransf); // % de descuento por pagar con transferencia
+  // Lo que realmente paga el cliente con cada medio: con transferencia se le descuenta dTransf%
+  const factorMedio = (m: Medio) => (m.tipo === 'transferencia' ? 1 - dTransf / 100 : 1);
   const comCobro = (m: Medio) => (m.tipo === 'transferencia' ? num(cfg.comTransf) : num(cfg.comTarjeta));
   const costoVentaPct = (m: Medio) => (comision + comCobro(m) + num(m.costo)) * kCostos;
 
@@ -305,19 +312,23 @@ export default function EcommercePage() {
       const ingreso = usado / k; // sin IVA
       const lim = cuotasDe(p);
       const deltaP = deltaPara(lim);
+      const precioTransf = usado * (1 - dTransf / 100); // con IVA
+      const vsListaTransf = lista > 0 && precioTransf > 0 ? (precioTransf / (lista * k) - 1) * 100 : null;
       const porMedio = activos.map((m) => {
         const ofrece = lim === 0 || num(m.cuotas) <= lim;
-        const neto = ingreso - (usado * costoVentaPct(m)) / 100;
-        const rent = ofrece && ingreso > 0 && costo > 0 ? ((neto - costo) / ingreso) * 100 : null;
+        const cobrado = usado * factorMedio(m); // con IVA, ya con el descuento por transferencia si corresponde
+        const ingresoM = cobrado / k; // sin IVA
+        const neto = ingresoM - (cobrado * costoVentaPct(m)) / 100;
+        const rent = ofrece && ingresoM > 0 && costo > 0 ? ((neto - costo) / ingresoM) * 100 : null;
         return { neto, rent, ganancia: neto - costo, ofrece };
       });
       const piso = lista > 0 ? (lista * k) / (1 - deltaP / 100) : 0;
       const vsPiso = piso > 0 && usado > 0 ? (usado / piso - 1) * 100 : null;
       const compraPT = lista * (1 - descPT / 100); // lo que paga el Punto Troya (sin IVA)
       const margenPT = compraPT > 0 && usado > 0 ? (usado / k / compraPT - 1) * 100 : null; // si tuviera que vender al precio web
-      return { p, lista, listaIva, costo, web, conDesc, objetivo, manual, usado, descReal, porMedio, piso, vsPiso, compraPT, margenPT, lim, deltaP };
+      return { p, lista, listaIva, costo, web, conDesc, objetivo, manual, usado, descReal, precioTransf, vsListaTransf, porMedio, piso, vsPiso, compraPT, margenPT, lim, deltaP };
     });
-  }, [productos, base, factor, desc, paso, cfg.modo, cfg.webConIva, comision, k, kCostos, descPT, deltaPct, manuales, medios, cfg.comTransf, cfg.comTarjeta, cuotasProd, cuotasCat]); // eslint-disable-line
+  }, [productos, base, factor, desc, paso, cfg.modo, cfg.webConIva, comision, k, kCostos, descPT, deltaPct, manuales, medios, cfg.comTransf, cfg.comTarjeta, cfg.descTransf, cuotasProd, cuotasCat]); // eslint-disable-line
 
   // Descuento que habría que hacerle al precio web para volver a la lista con IVA
   const ratioWeb = factor * (cfg.webConIva ? 1 : k) / k;
@@ -350,6 +361,7 @@ export default function EcommercePage() {
         [`Con ${cfg.descuento}% desc.`]: Math.round(r.conDesc),
         'Precio redondeado': r.objetivo, 'Precio manual': r.manual || '', 'Precio final': r.usado,
         'Desc. real vs web %': Math.round(r.descReal * 10) / 10,
+        [`Precio por transferencia (−${cfg.descTransf}%)`]: Math.round(r.precioTransf),
         'Compra Punto Troya (sin IVA)': Math.round(r.compraPT),
         'Piso web c/IVA (lista + IVA + cuotas)': Math.round(r.piso),
         'Precio final vs piso %': r.vsPiso === null ? '' : Math.round(r.vsPiso * 10) / 10,
@@ -406,11 +418,12 @@ export default function EcommercePage() {
     redondeado: 'El precio "lindo" más cercano al anterior, terminado en 999. Es la sugerencia automática del sistema.',
     final: 'Lo que decidís publicar, con IVA. Si lo dejás vacío se usa el redondeado. Es lo único que se edita en la tabla.',
     descReal: 'Cuánto descuento le hacés realmente al precio web con tu precio final. Puede no dar justo el descuento objetivo por el redondeo o por un precio cargado a mano.',
+    precioTransf: `Lo que paga el cliente si elige transferencia: tu precio final menos el ${cfg.descTransf}% que la tienda descuenta. El color indica cómo queda contra la lista con IVA: ✔ igual o por encima de la lista, ⚠ por debajo (le competís al Punto Troya cuando paga por transferencia).`,
     cuotas: 'Hasta cuántas cuotas sin interés ofrecés este producto. "Auto" toma las de su categoría (se definen en Configuración). Define su piso y qué medios de pago se calculan.',
     piso: `El precio más bajo que es justo cobrar: lista con IVA, más los intereses de las cuotas que ofrecés, menos las ${cuotasDist} que la lista ya incluye. Ejemplo: con 9 cuotas se suman los intereses de 9 menos ${cuotasDist}. Por debajo de este precio le competís al Punto Troya y a los distribuidores.`,
     estado: '✔ y el % que tu precio queda por encima del piso: está bien. ⚠ y el % que te falta: estás vendiendo más barato que el Punto Troya y le dejás sin margen. Pasá el mouse por el estado de cada fila para ver el margen que le queda.',
   };
-  const tipMedio = (m: Medio) => `Qué te queda si cobrás con ${m.nombre}: ${vista === 'rent' ? 'ganancia en % del precio sin IVA' : vista === 'ganancia' ? 'ganancia en pesos' : 'neto en pesos, sin IVA'}, después de restar el costo del producto y el costo de cobro (${coma(costoVentaPct(m), 2)}% = comisión de Pago Nube + costo de las cuotas). Si el producto no se vende en tantas cuotas, aparece "—".`;
+  const tipMedio = (m: Medio) => `Qué te queda si cobrás con ${m.nombre}${m.tipo === 'transferencia' && dTransf > 0 ? ` (con el ${cfg.descTransf}% de descuento de la tienda ya aplicado al precio)` : ''}: ${vista === 'rent' ? 'ganancia en % del precio sin IVA' : vista === 'ganancia' ? 'ganancia en pesos' : 'neto en pesos, sin IVA'}, después de restar el costo del producto y el costo de cobro (${coma(costoVentaPct(m), 2)}% = comisión de Pago Nube + costo de las cuotas). Si el producto no se vende en tantas cuotas, aparece "—".`;
   const kpi = (titulo: string, valor: string, sub: string, color?: string) => (
     <div style={{ ...tarjeta, padding: '14px 16px', textAlign: 'center' }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)' }}>{titulo}</div>
@@ -419,7 +432,7 @@ export default function EcommercePage() {
     </div>
   );
 
-  const nCols = 2 + ['costo', 'lista', 'listaIva', 'web', 'conDesc', 'redondeado', 'descReal', 'cuotas', 'piso', 'estado'].filter(ver).length + mediosVis.length;
+  const nCols = 2 + ['costo', 'lista', 'listaIva', 'web', 'conDesc', 'redondeado', 'descReal', 'precioTransf', 'cuotas', 'piso', 'estado'].filter(ver).length + mediosVis.length;
 
   return (
     <div ref={wrapRef} style={ancho ? { marginLeft: ancho.ml, width: ancho.w, boxSizing: 'border-box' } : undefined}>
@@ -481,6 +494,10 @@ export default function EcommercePage() {
             <label>
               <div style={etiqueta}>Pago Nube: comisión con tarjeta (%) — retiro elegido</div>
               <input className="troya-input" style={{ width: '100%' }} inputMode="decimal" value={cfg.comTarjeta} onChange={(e) => setCfg({ ...cfg, comTarjeta: e.target.value })} />
+            </label>
+            <label>
+              <div style={etiqueta}>Descuento de la tienda por pagar con transferencia (%)</div>
+              <input className="troya-input" style={{ width: '100%' }} inputMode="decimal" value={cfg.descTransf} onChange={(e) => setCfg({ ...cfg, descTransf: e.target.value })} />
             </label>
             <label>
               <div style={etiqueta}>IVA (%)</div>
@@ -568,7 +585,7 @@ export default function EcommercePage() {
       {/* Reglas vigentes: una sola línea */}
       <div style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
         <b style={{ color: 'var(--ink)' }}>Reglas vigentes:</b>{' '}
-        Factor ×{cfg.factor} · Descuento {cfg.descuento}% · {paso ? `Redondeo a $${paso.toLocaleString('es-AR')} − $1` : 'Sin redondeo'} · IVA {cfg.iva}% · Punto Troya: lista −{descPT}% con {cuotasDist} cuotas incluidas
+        Factor ×{cfg.factor} · Descuento {cfg.descuento}% · {paso ? `Redondeo a $${paso.toLocaleString('es-AR')} − $1` : 'Sin redondeo'} · Transferencia −{cfg.descTransf}% · IVA {cfg.iva}% · Punto Troya: lista −{descPT}% con {cuotasDist} cuotas incluidas
       </div>
 
       {/* Indicadores */}
@@ -666,6 +683,7 @@ export default function EcommercePage() {
                 {ver('redondeado') && <th {...tipProps(TIPS.redondeado)} style={{ ...th, cursor: 'help' }}>Redondeado{subTh('sugerido')}</th>}
                 <th {...tipProps(TIPS.final)} style={{ ...th, background: '#FFF3C4', color: 'var(--ink)', minWidth: 150, cursor: 'help' }}>Precio final{subTh('editable')}</th>
                 {ver('descReal') && <th {...tipProps(TIPS.descReal)} style={{ ...th, cursor: 'help' }}>Descuento real{subTh('vs. precio web')}</th>}
+                {ver('precioTransf') && <th {...tipProps(TIPS.precioTransf)} style={{ ...th, cursor: 'help' }}>Precio transferencia{subTh(`−${cfg.descTransf}% al pagar`)}</th>}
                 {ver('cuotas') && <th {...tipProps(TIPS.cuotas)} style={{ ...th, cursor: 'help' }}>Cuotas máx.{subTh('de este producto')}</th>}
                 {ver('piso') && <th {...tipProps(TIPS.piso)} style={{ ...th, cursor: 'help' }}>Piso web{subTh('lista + IVA + cuotas')}</th>}
                 {ver('estado') && <th {...tipProps(TIPS.estado)} style={{ ...th, cursor: 'help' }}>Estado{subTh('vs. el piso')}</th>}
@@ -673,6 +691,7 @@ export default function EcommercePage() {
                   <th key={m.key} {...tipProps(tipMedio(m))} style={{ ...th, cursor: 'help', ...(j === 0 ? { borderLeft: '1px solid var(--line)' } : {}) }}>
                     {corto(m.nombre)}
                     {subTh(`costo de cobro ${coma(costoVentaPct(m), 2)}%`)}
+                    {m.tipo === 'transferencia' && dTransf > 0 && subTh(`precio −${cfg.descTransf}%`)}
                   </th>
                 ))}
               </tr>
@@ -721,6 +740,20 @@ export default function EcommercePage() {
                       <div style={{ fontSize: 11, marginTop: 3, color: esManual ? 'var(--orange)' : 'var(--muted)' }}>{esManual ? 'precio manual' : 'automático'}</div>
                     </td>
                     {ver('descReal') && <td style={td}>{r.usado ? `−${coma(r.descReal)}%` : '—'}</td>}
+                    {ver('precioTransf') && (
+                      <td style={td} title={r.vsListaTransf !== null ? `Contra la lista con IVA (${pesos(r.listaIva)}): ${r.vsListaTransf >= 0 ? '+' : ''}${coma(r.vsListaTransf)}%` : ''}>
+                        {r.usado ? (
+                          <div>
+                            <div>{pesos(r.precioTransf)}</div>
+                            {r.vsListaTransf !== null && (
+                              <div style={{ fontSize: 11, marginTop: 2, fontWeight: 700, color: r.vsListaTransf >= 0 ? '#2e7d32' : '#DA231F' }}>
+                                {r.vsListaTransf >= 0 ? '✔ +' : '⚠ '}{coma(r.vsListaTransf)}% vs. lista
+                              </div>
+                            )}
+                          </div>
+                        ) : '—'}
+                      </td>
+                    )}
                     {ver('cuotas') && (
                       <td style={td}>
                         <select
